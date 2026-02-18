@@ -335,7 +335,7 @@ function App() {
   }, [isPlaying]);
 
   useEffect(() => {
-    document.title = currentSong ? `${getName(currentSong)} • Musiq` : "Musiq Web Player";
+    document.title = currentSong ? `${getName(currentSong)} • Void` : "Void Web Player";
   }, [currentSong]);
 
   // --- RENDER ---
@@ -345,7 +345,7 @@ function App() {
     <div className="auth-container">
         <Toaster/>
         <div className="auth-box">
-            <h1 style={{color:'var(--primary)', marginBottom:30}}>Musiq.</h1>
+            <h1 style={{color:'var(--primary)', marginBottom:30}}>Void.</h1>
             <input className="auth-input" placeholder="Email" onChange={e=>setAuthInput({...authInput,email:e.target.value})}/>
             <input className="auth-input" type="password" placeholder="Password" onChange={e=>setAuthInput({...authInput,password:e.target.value})}/>
             <button className="auth-btn" onClick={handleAuth}>{authMode==='login'?'Sign In':'Sign Up'}</button>
@@ -419,7 +419,7 @@ function App() {
 
         {/* --- SIDEBAR --- */}
         <div className="sidebar">
-            <div className="brand">Musiq.</div>
+            <div className="brand">Void.</div>
             <div className="nav-links">
                 <div className={`nav-item ${tab==='home'?'active':''}`} onClick={()=>setTab('home')}><Icons.Home/> Home</div>
                 <div className={`nav-item ${tab==='library'?'active':''}`} onClick={()=>setTab('library')}><Icons.Library/> Liked Songs</div>
