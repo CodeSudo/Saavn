@@ -103,15 +103,23 @@ function App() {
     return `${min}:${sec < 10 ? '0'+sec : sec}`;
   };
 
-  // --- HISTORY LOGIC ---
-  const addToHistory = (song) => {
-    const prev = JSON.parse(localStorage.getItem('musiq_history') || '[]');
-    const newHist = [song, ...prev.filter(s => String(s.id) !== String(song.id))].slice(0, 15);
-    localStorage.setItem('musiq_history', JSON.stringify(newHist));
+  // --- HISTORY LOGIC (SYNCED WITH FIREBASE) ---
+  const addToHistory = async (song) => {
+    // 1. Optimistic Update (Local State)
+    const newHist = [song, ...history.filter(s => String(s.id) !== String(song.id))].slice(0, 15);
     setHistory(newHist);
-  };
 
-  useEffect(() => { setHistory(JSON.parse(localStorage.getItem('musiq_history') || '[]')); }, []);
+    // 2. Persist based on Auth State
+    if (user) {
+        try {
+            const userRef = doc(db, "users", user.uid);
+            // We overwrite the 'history' field in the DB with the new array
+            await updateDoc(userRef, { history: newHist });
+        } catch (e) { console.error("Error saving history", e); }
+    } else {
+        localStorage.setItem('musiq_history', JSON.stringify(newHist));
+    }
+  };
 
   // --- DATA FETCHING ---
   const fetchHome = async () => {
@@ -303,13 +311,24 @@ function App() {
         if(u) {
             setUser(u); setView('app'); fetchHome();
             try {
+                // FETCH USER DATA & HISTORY
                 const userSnap = await getDoc(doc(db, "users", u.uid));
-                if(userSnap.exists()) setLikedSongs(userSnap.data().likedSongs || []);
-                else await setDoc(doc(db, "users", u.uid), { email: u.email, likedSongs: [] });
+                if(userSnap.exists()) {
+                    const data = userSnap.data();
+                    setLikedSongs(data.likedSongs || []);
+                    setHistory(data.history || []); // <--- LOAD HISTORY FROM DB
+                }
+                else await setDoc(doc(db, "users", u.uid), { email: u.email, likedSongs: [], history: [] });
+                
                 const q = query(collection(db, `users/${u.uid}/playlists`));
                 onSnapshot(q, (snapshot) => setUserPlaylists(snapshot.docs.map(d => ({id: d.id, ...d.data()}))));
             } catch {}
-        } else { setUser(null); setView('auth'); }
+        } else { 
+            setUser(null); 
+            setView('auth'); 
+            // Fallback load history from local storage for login screen / fast access
+            setHistory(JSON.parse(localStorage.getItem('musiq_history') || '[]'));
+        }
     });
     return () => unsub();
   }, []);
@@ -319,7 +338,7 @@ function App() {
     try {
         if(authMode==='signup') {
             const c = await createUserWithEmailAndPassword(auth, authInput.email, authInput.password);
-            await setDoc(doc(db, "users", c.user.uid), { email: authInput.email, likedSongs: [] });
+            await setDoc(doc(db, "users", c.user.uid), { email: authInput.email, likedSongs: [], history: [] });
         } else { await signInWithEmailAndPassword(auth, authInput.email, authInput.password); }
         toast.success("Welcome!", { id: toastId });
     } catch(e) { toast.error(e.message, { id: toastId }); }
@@ -363,7 +382,7 @@ function App() {
     }
   }, [currentSong, isPlaying, queue, qIndex]);
 
-  useEffect(() => { document.title = currentSong ? `${getName(currentSong)} • Void` : "Void Music"; }, [currentSong]);
+  useEffect(() => { document.title = currentSong ? `${getName(currentSong)} • Aura` : "Aura Music"; }, [currentSong]);
 
   if(view==='loading') return <div style={{height:'100vh',background:'black',display:'flex',justifyContent:'center',alignItems:'center',color:'white'}}>Loading...</div>;
 
@@ -371,7 +390,7 @@ function App() {
     <div className="auth-container">
         <Toaster/>
         <div className="auth-box">
-            <h1 className="brand">Void.</h1>
+            <h1 className="brand">Aura.</h1>
             <input className="auth-input" placeholder="Email" onChange={e=>setAuthInput({...authInput,email:e.target.value})}/>
             <input className="auth-input" type="password" placeholder="Password" onChange={e=>setAuthInput({...authInput,password:e.target.value})}/>
             <button className="auth-btn" onClick={handleAuth}>{authMode==='login'?'Sign In':'Sign Up'}</button>
@@ -444,7 +463,7 @@ function App() {
 
         {/* SIDEBAR */}
         <div className="sidebar">
-            <div className="brand">Void.</div>
+            <div className="brand">Aura.</div>
             <div className="nav-links">
                 <div className={`nav-item ${tab==='home'?'active':''}`} onClick={()=>setTab('home')}><Icons.Home/> Home</div>
                 <div className={`nav-item ${tab==='library'?'active':''}`} onClick={()=>setTab('library')}><Icons.Library/> Liked Songs</div>
