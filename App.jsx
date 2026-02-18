@@ -27,7 +27,6 @@ function App() {
 
   // Search Data
   const [searchQuery, setSearchQuery] = useState('');
-  // We now store search results in separate categories
   const [resSongs, setResSongs] = useState([]);
   const [resAlbums, setResAlbums] = useState([]);
   const [resArtists, setResArtists] = useState([]);
@@ -66,6 +65,7 @@ function App() {
 
   const getName = (item) => item.name || item.title || "Unknown";
   const getDesc = (item) => item.primaryArtists || item.description || item.year || item.role || "";
+  const isLiked = (id) => user?.likedSongs?.some(s => s.id === id);
 
   // ==============================
   // 2. DATA FETCHING
@@ -90,12 +90,12 @@ function App() {
   const doSearch = async () => {
     if (!searchQuery) { 
         setResSongs([]); setResAlbums([]); setResArtists([]); setResPlaylists([]);
+        setTab('home'); // Go back to home if query empty
         return; 
     }
     setLoading(true); setTab('search_results');
     
     try {
-      // Fetch all categories in parallel
       const [s, a, ar, p] = await Promise.all([
         fetch(`${API_BASE}/search/songs?query=${encodeURIComponent(searchQuery)}`).then(r => r.json()),
         fetch(`${API_BASE}/search/albums?query=${encodeURIComponent(searchQuery)}`).then(r => r.json()),
@@ -134,10 +134,9 @@ function App() {
         const res = await fetch(endpoint);
         const data = await res.json();
         
-        // Handle different API response structures
         if (data.success) {
            if (data.data.songs) setDetailsSongs(data.data.songs);
-           else if (data.data.topSongs) setDetailsSongs(data.data.topSongs); // Artists often have 'topSongs'
+           else if (data.data.topSongs) setDetailsSongs(data.data.topSongs); 
            else setDetailsSongs([]);
         }
       } catch (e) { console.error(e); } finally { setLoading(false); }
@@ -167,12 +166,13 @@ function App() {
 
   const toggleLike = async (song) => {
     if (!user) return;
-    const isLiked = likedSongs.some(s => s.id === song.id);
-    let newLikes = isLiked ? likedSongs.filter(s => s.id !== song.id) : [...likedSongs, song];
+    const liked = isLiked(song.id);
+    let newLikes = liked ? likedSongs.filter(s => s.id !== song.id) : [...likedSongs, song];
     setLikedSongs(newLikes);
+    
     const ref = doc(db, "users", user.uid);
     try {
-      if (isLiked) await updateDoc(ref, { likedSongs: arrayRemove(song) });
+      if (liked) await updateDoc(ref, { likedSongs: arrayRemove(song) });
       else await updateDoc(ref, { likedSongs: arrayUnion(song) });
     } catch (e) { console.error(e); }
   };
@@ -235,7 +235,7 @@ function App() {
     audioRef.current.pause(); setIsPlaying(false); setCurrentSong(null);
   };
 
-  // Lifecycle for Audio
+  // Lifecycle
   useEffect(() => {
     const a = audioRef.current;
     const time = () => { setProgress(a.currentTime); setDuration(a.duration||0); };
@@ -245,7 +245,6 @@ function App() {
     return () => { a.removeEventListener('timeupdate', time); a.removeEventListener('ended', end); };
   }, [queue, qIndex]);
 
-  const isLiked = (id) => user?.likedSongs?.some(s => s.id === id);
 
   // ==============================
   // 5. RENDER
@@ -326,6 +325,14 @@ function App() {
                            <h4>{getName(song)}</h4>
                            <p>{song.primaryArtists}</p>
                         </div>
+                        {/* 🔴 LIKE BUTTON INSIDE ALBUM LIST */}
+                        <div 
+                          className={`card-heart ${isLiked(song.id)?'liked':''}`} 
+                          style={{position:'static', opacity:1, margin:'0 15px', background:'transparent', fontSize:'1.2rem'}}
+                          onClick={(e)=>{e.stopPropagation(); toggleLike(song)}}
+                        >
+                          ♥
+                        </div>
                         <span className="song-dur">{Math.floor(song.duration/60)}:{String(song.duration%60).padStart(2, '0')}</span>
                      </div>
                   ))}
@@ -367,42 +374,6 @@ function App() {
                         ))}
                     </div>
                   </div>
-                )}
-
-                {/* 3. Artists Results */}
-                {resArtists.length > 0 && (
-                  <div className="section">
-                    <div className="section-header"><div className="section-title">Artists</div></div>
-                    <div className="horizontal-scroll">
-                        {resArtists.map((item) => (
-                          <div key={item.id} className="card" onClick={()=>handleCardClick(item, 'artist')} style={{textAlign:'center'}}>
-                            <img src={getImg(item.image)} alt="" style={{borderRadius:'50%'}}/>
-                            <h3>{getName(item)}</h3>
-                            <p>Artist</p>
-                          </div>
-                        ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* 4. Playlists Results */}
-                {resPlaylists.length > 0 && (
-                  <div className="section">
-                    <div className="section-header"><div className="section-title">Playlists</div></div>
-                    <div className="horizontal-scroll">
-                        {resPlaylists.map((item) => (
-                          <div key={item.id} className="card" onClick={()=>handleCardClick(item, 'playlist')}>
-                            <img src={getImg(item.image)} alt=""/>
-                            <h3>{getName(item)}</h3>
-                            <p>Playlist</p>
-                          </div>
-                        ))}
-                    </div>
-                  </div>
-                )}
-
-                {!loading && resSongs.length===0 && resAlbums.length===0 && resArtists.length===0 && (
-                  <p style={{textAlign:'center', marginTop:'50px', color:'#666'}}>No results found.</p>
                 )}
              </>
           )}
