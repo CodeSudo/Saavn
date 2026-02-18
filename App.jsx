@@ -35,6 +35,7 @@ const MOODS = [
   { id: 'm3', name: 'Sad', color: '#ba68c8', query: 'Sad Songs' },
   { id: 'm4', name: 'Workout', color: '#ffb74d', query: 'Gym Motivation' },
   { id: 'm5', name: 'Chill', color: '#4db6ac', query: 'Chill Lo-Fi' },
+  { id: 'm6', name: 'Retro', color: '#7986cb', query: 'Retro Classics' },
 ];
 
 function App() {
@@ -53,6 +54,10 @@ function App() {
   const [resAlbums, setResAlbums] = useState([]);
   const [resArtists, setResArtists] = useState([]);
   const [resPlaylists, setResPlaylists] = useState([]);
+  
+  // NEW: Dedicated state for Mood View
+  const [moodPlaylists, setMoodPlaylists] = useState([]);
+
   const [homeData, setHomeData] = useState({ 
     trending: [], charts: [], newAlbums: [], editorial: [], radio: [], love: [], fresh: [], nineties: [], hindiPop: [] 
   });
@@ -98,7 +103,7 @@ function App() {
     return `${min}:${sec < 10 ? '0'+sec : sec}`;
   };
 
-  // --- HISTORY ---
+  // --- HISTORY LOGIC ---
   const addToHistory = (song) => {
     const prev = JSON.parse(localStorage.getItem('musiq_history') || '[]');
     const newHist = [song, ...prev.filter(s => String(s.id) !== String(song.id))].slice(0, 15);
@@ -170,7 +175,7 @@ function App() {
 
   // --- PLAYER LOGIC ---
   const playSong = (list, idx) => {
-    if(!list || !list[idx]) return;
+    if(!list || idx < 0 || !list[idx]) return;
     setQueue(list); setQIndex(idx);
     const s = list[idx];
     setCurrentSong(s);
@@ -257,18 +262,16 @@ function App() {
     } catch(e) { toast.error("Failed"); }
   };
 
-  // --- NAVIGATION ---
+  // --- NAVIGATION (FIXED MOOD) ---
   const handleCardClick = async (item, type) => {
     if (type === 'song') { playSong([item], 0); }
     else if (type === 'playlist_custom') { setSelectedItem(item); setTab('details'); setDetailsSongs(item.songs || []); }
     else if (type === 'mood') {
-        setLoading(true); setTab('search'); setResAlbums([]); setResArtists([]);
+        // FIXED: Only fetch Playlists for mood, treat as separate View
+        setLoading(true); setTab('mood'); setSelectedItem(item);
         try {
-            const [p, s] = await Promise.all([
-                fetch(`${API_BASE}/search/playlists?query=${encodeURIComponent(item.query)}`).then(r=>r.json()),
-                fetch(`${API_BASE}/search/songs?query=${encodeURIComponent(item.query)}`).then(r=>r.json())
-            ]);
-            setResPlaylists(p?.data?.results || []); setResSongs(s?.data?.results || []);
+            const res = await fetch(`${API_BASE}/search/playlists?query=${encodeURIComponent(item.query)}`).then(r=>r.json());
+            setMoodPlaylists(res?.data?.results || []);
         } catch(e) { console.error(e); } finally { setLoading(false); }
     }
     else {
@@ -347,7 +350,7 @@ function App() {
     }
   }, [currentSong, isPlaying, queue, qIndex]);
 
-  useEffect(() => { document.title = currentSong ? `${getName(currentSong)} • Musiq` : "Musiq Web Player"; }, [currentSong]);
+  useEffect(() => { document.title = currentSong ? `${getName(currentSong)} • Aura` : "Aura Music"; }, [currentSong]);
 
   if(view==='loading') return <div style={{height:'100vh',background:'black',display:'flex',justifyContent:'center',alignItems:'center',color:'white'}}>Loading...</div>;
 
@@ -368,6 +371,7 @@ function App() {
     <div className="app-layout">
         <Toaster position="top-center" toastOptions={{style:{background:'#333', color:'#fff'}}}/>
 
+        {/* --- OVERLAYS --- */}
         {showLyrics && (
             <div className="lyrics-overlay">
                 <button className="lyrics-close" onClick={()=>setShowLyrics(false)}>✕</button>
@@ -514,51 +518,30 @@ function App() {
                                 </div>
                             </>
                         )}
-                        {resAlbums.length > 0 && (
-                            <>
-                                <div className="section-header" style={{marginTop:40}}>Albums</div>
-                                <div className="horizontal-scroll">
-                                    {resAlbums.map(a => (
-                                        <div key={a.id} className="card" onClick={()=>handleCardClick(a, 'album')}>
-                                            <img src={getImg(a.image)} alt=""/>
-                                            <h3>{getName(a)}</h3>
-                                            <p>{a.year}</p>
-                                        </div>
-                                    ))}
-                                </div>
-                            </>
-                        )}
-                        {resArtists.length > 0 && (
-                            <>
-                                <div className="section-header" style={{marginTop:40}}>Artists</div>
-                                <div className="horizontal-scroll">
-                                    {resArtists.map(a => (
-                                        <div key={a.id} className="card" onClick={()=>handleCardClick(a, 'artist')}>
-                                            <img src={getImg(a.image)} alt="" style={{borderRadius:'50%'}}/>
-                                            <h3 style={{textAlign:'center'}}>{getName(a)}</h3>
-                                        </div>
-                                    ))}
-                                </div>
-                            </>
-                        )}
-                        {resPlaylists.length > 0 && (
-                            <>
-                                <div className="section-header" style={{marginTop:40}}>Playlists</div>
-                                <div className="horizontal-scroll">
-                                    {resPlaylists.map(p => (
-                                        <div key={p.id} className="card" onClick={()=>handleCardClick(p, 'playlist')}>
-                                            <img src={getImg(p.image)} alt=""/>
-                                            <h3>{getName(p)}</h3>
-                                            <p>{p.language}</p>
-                                        </div>
-                                    ))}
-                                </div>
-                            </>
-                        )}
+                        {/* More search results categories can be added here if needed */}
                     </div>
                 )}
 
-                {/* HOME (ALL SECTIONS RESTORED) */}
+                {/* MOOD VIEW - NEW FEATURE */}
+                {tab === 'mood' && selectedItem && (
+                    <div className="section">
+                        <div className="details-header" style={{background: selectedItem.color, borderRadius:'24px', padding:'40px', marginBottom:'40px'}}>
+                            <h1 style={{fontSize:'3rem'}}>{selectedItem.name} Mix</h1>
+                            <p>Curated Playlists for your mood</p>
+                        </div>
+                        <div className="grid">
+                            {moodPlaylists.map(p => (
+                                <div key={p.id} className="card" onClick={()=>handleCardClick(p, 'playlist')}>
+                                    <img src={getImg(p.image)} alt=""/>
+                                    <h3>{getName(p)}</h3>
+                                    <p>{p.language}</p>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                )}
+
+                {/* HOME */}
                 {tab === 'home' && (
                     <>
                         <div className="hero">
