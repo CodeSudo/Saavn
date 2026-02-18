@@ -30,12 +30,11 @@ import { doc, setDoc, getDoc, updateDoc, arrayUnion, arrayRemove, collection, ad
 const API_BASE = "https://saavn.sumit.co/api";
 
 const MOODS = [
-  { id: 'mood-party', name: 'Party', color: '#e57373', query: 'Party Hits' },
-  { id: 'mood-romance', name: 'Romance', color: '#f06292', query: 'Love Songs' },
-  { id: 'mood-sad', name: 'Sad', color: '#ba68c8', query: 'Sad Songs' },
-  { id: 'mood-chill', name: 'Chill', color: '#4db6ac', query: 'Chill Lo-Fi' },
-  { id: 'mood-workout', name: 'Workout', color: '#ffb74d', query: 'Workout Gym' },
-  { id: 'mood-retro', name: 'Retro', color: '#7986cb', query: 'Retro Classics' },
+  { id: 'm1', name: 'Party', color: '#e57373', query: 'Party Hits' },
+  { id: 'm2', name: 'Romance', color: '#f06292', query: 'Love Songs' },
+  { id: 'm3', name: 'Sad', color: '#ba68c8', query: 'Sad Songs' },
+  { id: 'm4', name: 'Workout', color: '#ffb74d', query: 'Gym Motivation' },
+  { id: 'm5', name: 'Chill', color: '#4db6ac', query: 'Chill Lo-Fi' },
 ];
 
 function App() {
@@ -92,7 +91,6 @@ function App() {
   const getDesc = (i) => i?.primaryArtists || i?.description || i?.year || "";
   const isLiked = (id) => likedSongs.some(s => String(s.id) === String(id));
   
-  // NEW HELPER: Format Time (00:00)
   const formatTime = (s) => {
     if(isNaN(s)) return "0:00";
     const min = Math.floor(s / 60);
@@ -100,17 +98,15 @@ function App() {
     return `${min}:${sec < 10 ? '0'+sec : sec}`;
   };
 
-  // --- HISTORY LOGIC ---
+  // --- HISTORY ---
   const addToHistory = (song) => {
-    const prev = JSON.parse(localStorage.getItem('Void_history') || '[]');
+    const prev = JSON.parse(localStorage.getItem('musiq_history') || '[]');
     const newHist = [song, ...prev.filter(s => String(s.id) !== String(song.id))].slice(0, 15);
-    localStorage.setItem('Void_history', JSON.stringify(newHist));
+    localStorage.setItem('musiq_history', JSON.stringify(newHist));
     setHistory(newHist);
   };
 
-  useEffect(() => {
-    setHistory(JSON.parse(localStorage.getItem('Void_history') || '[]'));
-  }, []);
+  useEffect(() => { setHistory(JSON.parse(localStorage.getItem('musiq_history') || '[]')); }, []);
 
   // --- DATA FETCHING ---
   const fetchHome = async () => {
@@ -139,7 +135,8 @@ function App() {
         nineties: results[7]?.data?.results || [],
         hindiPop: results[8]?.data?.results || []
       });
-    } catch(e) { console.error(e); } finally { setLoading(false); }
+    } catch(e) { console.error("Home Error", e); } 
+    finally { setLoading(false); }
   };
 
   const doSearch = async () => {
@@ -152,10 +149,7 @@ function App() {
         fetch(`${API_BASE}/search/artists?query=${encodeURIComponent(searchQuery)}`).then(r=>r.json()),
         fetch(`${API_BASE}/search/playlists?query=${encodeURIComponent(searchQuery)}`).then(r=>r.json())
       ]);
-      setResSongs(s?.data?.results || []);
-      setResAlbums(a?.data?.results || []);
-      setResArtists(ar?.data?.results || []);
-      setResPlaylists(p?.data?.results || []);
+      setResSongs(s?.data?.results || []); setResAlbums(a?.data?.results || []); setResArtists(ar?.data?.results || []); setResPlaylists(p?.data?.results || []);
     } catch(e) { console.error(e); } finally { setLoading(false); }
   };
 
@@ -176,9 +170,8 @@ function App() {
 
   // --- PLAYER LOGIC ---
   const playSong = (list, idx) => {
-    if(!list || idx < 0 || !list[idx]) return;
-    if(list !== queue) setQueue(list);
-    setQIndex(idx);
+    if(!list || !list[idx]) return;
+    setQueue(list); setQIndex(idx);
     const s = list[idx];
     setCurrentSong(s);
     addToHistory(s);
@@ -186,10 +179,8 @@ function App() {
     const url = s.downloadUrl?.find(u=>u.quality===quality)?.url || s.downloadUrl?.[0]?.url;
     if(url) {
         if(audioRef.current.src !== url) {
-            audioRef.current.src = url;
-            audioRef.current.volume = volume;
-            audioRef.current.play().catch(()=>{});
-            setIsPlaying(true);
+            audioRef.current.src = url; audioRef.current.volume = volume;
+            audioRef.current.play().catch(()=>{}); setIsPlaying(true);
         } else { audioRef.current.play(); setIsPlaying(true); }
     } else toast.error("Audio unavailable");
   };
@@ -344,16 +335,27 @@ function App() {
   }, [isPlaying]);
 
   useEffect(() => {
-    document.title = currentSong ? `${getName(currentSong)} • Void` : "Void Web Player";
-  }, [currentSong]);
+    if ('mediaSession' in navigator && currentSong) {
+      navigator.mediaSession.metadata = new MediaMetadata({
+        title: getName(currentSong), artist: getDesc(currentSong),
+        artwork: [{ src: getImg(currentSong.image), sizes: '512x512', type: 'image/jpeg' }]
+      });
+      navigator.mediaSession.setActionHandler('play', togglePlay);
+      navigator.mediaSession.setActionHandler('pause', togglePlay);
+      navigator.mediaSession.setActionHandler('previoustrack', () => playSong(queue, qIndex - 1));
+      navigator.mediaSession.setActionHandler('nexttrack', () => playSong(queue, qIndex + 1));
+    }
+  }, [currentSong, isPlaying, queue, qIndex]);
 
-  if(view==='loading') return <div style={{height:'100vh',background:'black',display:'flex',justifyContent:'center',alignItems:'center'}}>Loading...</div>;
+  useEffect(() => { document.title = currentSong ? `${getName(currentSong)} • Musiq` : "Musiq Web Player"; }, [currentSong]);
+
+  if(view==='loading') return <div style={{height:'100vh',background:'black',display:'flex',justifyContent:'center',alignItems:'center',color:'white'}}>Loading...</div>;
 
   if(view==='auth') return (
     <div className="auth-container">
         <Toaster/>
         <div className="auth-box">
-            <h1 style={{color:'var(--primary)', marginBottom:30}}>Void.</h1>
+            <h1 className="brand">Aura.</h1>
             <input className="auth-input" placeholder="Email" onChange={e=>setAuthInput({...authInput,email:e.target.value})}/>
             <input className="auth-input" type="password" placeholder="Password" onChange={e=>setAuthInput({...authInput,password:e.target.value})}/>
             <button className="auth-btn" onClick={handleAuth}>{authMode==='login'?'Sign In':'Sign Up'}</button>
@@ -426,7 +428,7 @@ function App() {
 
         {/* SIDEBAR */}
         <div className="sidebar">
-            <div className="brand">Void.</div>
+            <div className="brand">Aura.</div>
             <div className="nav-links">
                 <div className={`nav-item ${tab==='home'?'active':''}`} onClick={()=>setTab('home')}><Icons.Home/> Home</div>
                 <div className={`nav-item ${tab==='library'?'active':''}`} onClick={()=>setTab('library')}><Icons.Library/> Liked Songs</div>
@@ -512,21 +514,51 @@ function App() {
                                 </div>
                             </>
                         )}
-                        {/* More Sections... */}
-                        {resPlaylists.length > 0 && <div className="section-header" style={{marginTop:40}}>Playlists</div>}
-                        <div className="horizontal-scroll">
-                            {resPlaylists.map(p => (
-                                <div key={p.id} className="card" onClick={()=>handleCardClick(p, 'playlist')}>
-                                    <img src={getImg(p.image)} alt=""/>
-                                    <h3>{getName(p)}</h3>
-                                    <p>{p.language}</p>
+                        {resAlbums.length > 0 && (
+                            <>
+                                <div className="section-header" style={{marginTop:40}}>Albums</div>
+                                <div className="horizontal-scroll">
+                                    {resAlbums.map(a => (
+                                        <div key={a.id} className="card" onClick={()=>handleCardClick(a, 'album')}>
+                                            <img src={getImg(a.image)} alt=""/>
+                                            <h3>{getName(a)}</h3>
+                                            <p>{a.year}</p>
+                                        </div>
+                                    ))}
                                 </div>
-                            ))}
-                        </div>
+                            </>
+                        )}
+                        {resArtists.length > 0 && (
+                            <>
+                                <div className="section-header" style={{marginTop:40}}>Artists</div>
+                                <div className="horizontal-scroll">
+                                    {resArtists.map(a => (
+                                        <div key={a.id} className="card" onClick={()=>handleCardClick(a, 'artist')}>
+                                            <img src={getImg(a.image)} alt="" style={{borderRadius:'50%'}}/>
+                                            <h3 style={{textAlign:'center'}}>{getName(a)}</h3>
+                                        </div>
+                                    ))}
+                                </div>
+                            </>
+                        )}
+                        {resPlaylists.length > 0 && (
+                            <>
+                                <div className="section-header" style={{marginTop:40}}>Playlists</div>
+                                <div className="horizontal-scroll">
+                                    {resPlaylists.map(p => (
+                                        <div key={p.id} className="card" onClick={()=>handleCardClick(p, 'playlist')}>
+                                            <img src={getImg(p.image)} alt=""/>
+                                            <h3>{getName(p)}</h3>
+                                            <p>{p.language}</p>
+                                        </div>
+                                    ))}
+                                </div>
+                            </>
+                        )}
                     </div>
                 )}
 
-                {/* HOME */}
+                {/* HOME (ALL SECTIONS RESTORED) */}
                 {tab === 'home' && (
                     <>
                         <div className="hero">
@@ -534,6 +566,7 @@ function App() {
                             <p>Discover new music, fresh albums, and curated playlists.</p>
                         </div>
 
+                        {/* 1. History */}
                         {history.length > 0 && (
                             <div className="section">
                                 <div className="section-header">Recently Played</div>
@@ -548,6 +581,7 @@ function App() {
                             </div>
                         )}
 
+                        {/* 2. Moods */}
                         <div className="section">
                             <div className="section-header">Moods</div>
                             <div className="horizontal-scroll">
@@ -559,8 +593,9 @@ function App() {
                             </div>
                         </div>
 
+                        {/* 3. Trending */}
                         <div className="section">
-                            <div className="section-header">Trending</div>
+                            <div className="section-header">Trending Now</div>
                             <div className="horizontal-scroll">
                                 {homeData.trending.map(s => (
                                     <div key={s.id} className="card" onClick={()=>handleCardClick(s, 'song')}>
@@ -576,6 +611,7 @@ function App() {
                             </div>
                         </div>
 
+                        {/* 4. Top Charts */}
                         <div className="section">
                             <div className="section-header">Top Charts</div>
                             <div className="horizontal-scroll">
@@ -584,6 +620,90 @@ function App() {
                                         <img src={getImg(p.image)} alt=""/>
                                         <h3>{getName(p)}</h3>
                                         <p>{p.language}</p>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+
+                        {/* 5. New Albums */}
+                        <div className="section">
+                            <div className="section-header">New Albums</div>
+                            <div className="horizontal-scroll">
+                                {homeData.newAlbums.map(a => (
+                                    <div key={a.id} className="card" onClick={()=>handleCardClick(a, 'album')}>
+                                        <img src={getImg(a.image)} alt=""/>
+                                        <h3>{getName(a)}</h3>
+                                        <p>{a.year}</p>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+
+                        {/* 6. Radio (Artists) */}
+                        <div className="section">
+                            <div className="section-header">Radio Stations</div>
+                            <div className="horizontal-scroll">
+                                {homeData.radio.map(a => (
+                                    <div key={a.id} className="card" onClick={()=>handleCardClick(a, 'artist')}>
+                                        <img src={getImg(a.image)} alt="" style={{borderRadius:'50%'}}/>
+                                        <h3 style={{textAlign:'center'}}>{getName(a)}</h3>
+                                        <p style={{textAlign:'center', fontSize:'0.8rem'}}>Artist Radio</p>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+
+                        {/* 7. Editorial */}
+                        <div className="section">
+                            <div className="section-header">Editorial Picks</div>
+                            <div className="horizontal-scroll">
+                                {homeData.editorial.map(p => (
+                                    <div key={p.id} className="card" onClick={()=>handleCardClick(p, 'playlist')}>
+                                        <img src={getImg(p.image)} alt=""/>
+                                        <h3>{getName(p)}</h3>
+                                        <p>Featured</p>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+
+                        {/* 8. Fresh Hits */}
+                        <div className="section">
+                            <div className="section-header">Fresh Hits</div>
+                            <div className="horizontal-scroll">
+                                {homeData.fresh.map(p => (
+                                    <div key={p.id} className="card" onClick={()=>handleCardClick(p, 'playlist')}>
+                                        <img src={getImg(p.image)} alt=""/>
+                                        <h3>{getName(p)}</h3>
+                                        <p>New Music</p>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+
+                        {/* 9. 90s Magic */}
+                        <div className="section">
+                            <div className="section-header">Best of 90s</div>
+                            <div className="horizontal-scroll">
+                                {homeData.nineties.map(p => (
+                                    <div key={p.id} className="card" onClick={()=>handleCardClick(p, 'playlist')}>
+                                        <img src={getImg(p.image)} alt=""/>
+                                        <h3>{getName(p)}</h3>
+                                        <p>Nostalgia</p>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+
+                        {/* 10. Hindi Pop */}
+                        <div className="section">
+                            <div className="section-header">New Hindi Pop</div>
+                            <div className="horizontal-scroll">
+                                {homeData.hindiPop.map(a => (
+                                    <div key={a.id} className="card" onClick={()=>handleCardClick(a, 'album')}>
+                                        <img src={getImg(a.image)} alt=""/>
+                                        <h3>{getName(a)}</h3>
+                                        <p>{a.year}</p>
                                     </div>
                                 ))}
                             </div>
