@@ -1,51 +1,62 @@
 import React, { useState, useRef, useEffect } from 'react';
 import './App.css';
-// Firebase
-import { auth, db } from './firebase'; 
-import { signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, onAuthStateChanged } from 'firebase/auth';
-import { doc, setDoc, getDoc, updateDoc, arrayUnion, arrayRemove } from 'firebase/firestore';
+import toast, { Toaster } from 'react-hot-toast';
 
-// API
-const API_BASE = "https://jio-codesudo.vercel.app/api";
-
-// Icons
+// --- 1. FIXED ICONS (Prevents Black Screen) ---
 const Icons = {
   Home: () => <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/></svg>,
-  Search: () => <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>,
-  Library: () => <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>,
+  Search: () => <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>,
+  Library: () => <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>,
   Play: () => <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>,
   Pause: () => <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>,
+  // Renamed these to match usage below
+  SkipFwd: () => <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 4 15 12 5 20 5 4"/><line x1="19" y1="5" x2="19" y2="19"/></svg>,
   SkipBack: () => <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><polygon points="19 20 9 12 19 4 19 20"/><line x1="5" y1="19" x2="5" y2="5"/></svg>,
-  SkipFwd: () => <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 4 15 12 5 20 5 4"/><line x1="19" y1="5" x2="19" y2="19"/></svg>
+  Plus: () => <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>,
+  List: () => <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>,
+  Mic: () => <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>,
+  Heart: () => <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>,
+  Trash: () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
 };
 
+// FIREBASE Imports
+import { auth, db } from './firebase'; 
+import { signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, onAuthStateChanged } from 'firebase/auth';
+import { doc, setDoc, getDoc, updateDoc, arrayUnion, arrayRemove, collection, addDoc, onSnapshot, query } from 'firebase/firestore';
+
+const API_BASE = "https://saavn.sumit.co/api";
+
 function App() {
-  // Navigation & UI
+  // --- UI STATE ---
   const [view, setView] = useState('loading'); 
   const [tab, setTab] = useState('home');   
   const [loading, setLoading] = useState(false);
 
-  // User & Auth
+  // --- USER STATE ---
   const [user, setUser] = useState(null);
   const [likedSongs, setLikedSongs] = useState([]);
+  const [userPlaylists, setUserPlaylists] = useState([]); 
   const [authMode, setAuthMode] = useState('login');
   const [authInput, setAuthInput] = useState({ email: '', password: '' });
 
-  // Data
+  // --- DATA STATE ---
   const [searchQuery, setSearchQuery] = useState('');
   const [resSongs, setResSongs] = useState([]);
   const [resAlbums, setResAlbums] = useState([]);
-  const [resPlaylists, setResPlaylists] = useState([]);
+  const [homeData, setHomeData] = useState({ trending:[], albums:[], playlists:[] });
   
-  const [trendingSongs, setTrendingSongs] = useState([]);
-  const [newAlbums, setNewAlbums] = useState([]);
-  const [topPlaylists, setTopPlaylists] = useState([]);
-
-  // Details Page
+  // --- DETAILS & MODALS ---
   const [selectedItem, setSelectedItem] = useState(null);
   const [detailsSongs, setDetailsSongs] = useState([]);
+  const [showLyrics, setShowLyrics] = useState(false);
+  const [lyricsText, setLyricsText] = useState("");
+  const [showQueue, setShowQueue] = useState(false);
+  const [showPlaylistModal, setShowPlaylistModal] = useState(false);
+  const [showAddToPlaylistModal, setShowAddToPlaylistModal] = useState(false);
+  const [songToAdd, setSongToAdd] = useState(null);
+  const [newPlaylistName, setNewPlaylistName] = useState("");
 
-  // Player
+  // --- PLAYER STATE ---
   const audioRef = useRef(new Audio());
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentSong, setCurrentSong] = useState(null);
@@ -53,114 +64,68 @@ function App() {
   const [qIndex, setQIndex] = useState(-1);
   const [progress, setProgress] = useState(0);
   const [duration, setDuration] = useState(0);
-  const [quality, setQuality] = useState('320kbps');
   const [volume, setVolume] = useState(1);
+  const [quality, setQuality] = useState('320kbps');
 
-  // --- 1. HELPERS ---
-  const getImg = (img) => {
-    if (!img) return "https://via.placeholder.com/150";
-    if (Array.isArray(img) && img.length > 0) return img[img.length - 1]?.url || img[0]?.url;
-    return img;
-  };
-  const getName = (i) => i.name || i.title || "Unknown";
-  const getDesc = (i) => i.primaryArtists || i.description || i.year || "";
-  
-  // FIXED: Ensure strict ID comparison
-  const isLiked = (id) => user?.likedSongs?.some(s => String(s.id) === String(id));
+  // --- HELPERS ---
+  const getImg = (i) => {
+    if(!i) return "https://via.placeholder.com/150";
+    if(Array.isArray(i)) return i[i.length-1]?.url || i[0]?.url;
+    return i;
+  }
+  const getName = (i) => i?.name || i?.title || "Unknown";
+  const getDesc = (i) => i?.primaryArtists || i?.description || i?.year || "";
+  const isLiked = (id) => likedSongs.some(s => String(s.id) === String(id));
 
-  // --- 2. DATA FETCHING ---
+  // --- 1. DATA FETCHING ---
   const fetchHome = async () => {
     setLoading(true);
     try {
       const [s, a, p] = await Promise.all([
-        fetch(`${API_BASE}/search/songs?query=Top 50&limit=15`).then(r => r.json()).catch(()=>({})),
-        fetch(`${API_BASE}/search/albums?query=New&limit=15`).then(r => r.json()).catch(()=>({})),
-        fetch(`${API_BASE}/search/playlists?query=Hits&limit=15`).then(r => r.json()).catch(()=>({}))
+        fetch(`${API_BASE}/search/songs?query=Top 50&limit=15`).then(r=>r.json()).catch(()=>({})),
+        fetch(`${API_BASE}/search/albums?query=New&limit=15`).then(r=>r.json()).catch(()=>({})),
+        fetch(`${API_BASE}/search/playlists?query=Hits&limit=15`).then(r=>r.json()).catch(()=>({}))
       ]);
-      if(s?.success) setTrendingSongs(s.data.results);
-      if(a?.success) setNewAlbums(a.data.results);
-      if(p?.success) setTopPlaylists(p.data.results);
+      setHomeData({ 
+        trending: s?.data?.results || [], 
+        albums: a?.data?.results || [], 
+        playlists: p?.data?.results || [] 
+      });
     } catch(e) { console.error(e); } finally { setLoading(false); }
   };
 
   const doSearch = async () => {
-    if(!searchQuery) { 
-        setResSongs([]); setResAlbums([]); setResPlaylists([]); setTab('home'); return; 
-    }
+    if(!searchQuery) return;
     setLoading(true); setTab('search');
     try {
-      const [s, a, p] = await Promise.all([
+      const [s, a] = await Promise.all([
         fetch(`${API_BASE}/search/songs?query=${encodeURIComponent(searchQuery)}`).then(r=>r.json()),
-        fetch(`${API_BASE}/search/albums?query=${encodeURIComponent(searchQuery)}`).then(r=>r.json()),
-        fetch(`${API_BASE}/search/playlists?query=${encodeURIComponent(searchQuery)}`).then(r=>r.json())
+        fetch(`${API_BASE}/search/albums?query=${encodeURIComponent(searchQuery)}`).then(r=>r.json())
       ]);
-      setResSongs(s.success ? s.data.results : []);
-      setResAlbums(a.success ? a.data.results : []);
-      setResPlaylists(p.success ? p.data.results : []);
+      setResSongs(s?.data?.results || []);
+      setResAlbums(a?.data?.results || []);
     } catch(e) { console.error(e); } finally { setLoading(false); }
   };
 
-  // --- 3. LOGIC (LIKES FIXED) ---
-  const toggleLike = async (item) => {
-    if(!user) return alert("Please Login");
+  const fetchLyrics = async () => {
+    if(!currentSong) return;
+    if(showLyrics) { setShowLyrics(false); return; }
     
-    // 1. Check if already liked using strict string comparison
-    const alreadyLiked = isLiked(item.id);
-    const userRef = doc(db, "users", user.uid);
-
+    const toastId = toast.loading("Fetching lyrics...");
     try {
-        if(alreadyLiked) {
-            // UNLIKE: Remove the exact object from the array
-            // We must find the exact object in the local array to pass to arrayRemove
-            const itemToRemove = likedSongs.find(s => String(s.id) === String(item.id));
-            
-            if (itemToRemove) {
-                // Optimistic UI Update
-                const newLikes = likedSongs.filter(s => String(s.id) !== String(item.id));
-                setLikedSongs(newLikes);
-                
-                // DB Update
-                await updateDoc(userRef, { likedSongs: arrayRemove(itemToRemove) });
-            }
-        } else {
-            // LIKE: Add to array
-            // Sanitize data to ensure we don't save garbage
-            const cleanItem = {
-                id: String(item.id), // Force String ID
-                name: item.name || item.title || "Unknown",
-                primaryArtists: item.primaryArtists || item.description || "",
-                image: item.image || [],
-                downloadUrl: item.downloadUrl || [], // Important for playback
-                duration: item.duration || 0
-            };
-
-            // Optimistic UI Update
-            setLikedSongs([...likedSongs, cleanItem]);
-
-            // DB Update
-            await updateDoc(userRef, { likedSongs: arrayUnion(cleanItem) });
-        }
-    } catch(e) { 
-        console.error("Like Error", e);
-        // If error, revert UI (optional but good practice)
-        // For simplicity we leave it, but a real app would fetch from DB again
-    }
-  };
-
-  const handleCardClick = async (item, type) => {
-    if (type === 'song') {
-      playSong([item], 0);
-    } else {
-      setSelectedItem(item); setTab('details'); setLoading(true); setDetailsSongs([]);
-      try {
-        const endpoint = type === 'album' ? `${API_BASE}/albums?id=${item.id}` : `${API_BASE}/playlists?id=${item.id}`;
-        const res = await fetch(endpoint);
+        const res = await fetch(`${API_BASE}/lyrics?id=${currentSong.id}`);
         const data = await res.json();
-        if(data.success && data.data.songs) setDetailsSongs(data.data.songs);
-      } catch(e) { console.error(e); } finally { setLoading(false); }
-    }
+        if(data.success && data.data?.lyrics) {
+            setLyricsText(data.data.lyrics.replace(/<br>/g, "\n"));
+            setShowLyrics(true);
+            toast.success("Lyrics loaded", { id: toastId });
+        } else {
+            toast.error("Lyrics not available", { id: toastId });
+        }
+    } catch(e) { toast.error("Error loading lyrics", { id: toastId }); }
   };
 
+  // --- 2. PLAYER LOGIC ---
   const playSong = (list, idx) => {
     if(!list || idx < 0 || !list[idx]) return;
     if(list !== queue) setQueue(list);
@@ -168,17 +133,17 @@ function App() {
     const s = list[idx];
     setCurrentSong(s);
     
-    const url = s.downloadUrl?.find(u => u.quality === quality)?.url || s.downloadUrl?.[0]?.url;
+    const url = s.downloadUrl?.find(u=>u.quality===quality)?.url || s.downloadUrl?.[0]?.url;
     if(url) {
-      if(audioRef.current.src !== url) {
-        audioRef.current.src = url;
-        audioRef.current.volume = volume;
-        audioRef.current.play().catch(e=>console.error(e));
-        setIsPlaying(true);
-      } else {
-        audioRef.current.play(); setIsPlaying(true);
-      }
-    } else alert("Audio Unavailable");
+        if(audioRef.current.src !== url) {
+            audioRef.current.src = url;
+            audioRef.current.volume = volume;
+            audioRef.current.play().catch(()=>{});
+            setIsPlaying(true);
+        } else {
+            audioRef.current.play(); setIsPlaying(true);
+        }
+    } else toast.error("Audio unavailable");
   };
 
   const togglePlay = () => {
@@ -186,15 +151,100 @@ function App() {
     else { audioRef.current.pause(); setIsPlaying(false); }
   };
 
-  // --- 4. AUTH & LIFECYCLE ---
+  const removeFromQueue = (idx) => {
+    const newQueue = queue.filter((_, i) => i !== idx);
+    setQueue(newQueue);
+    if(idx < qIndex) setQIndex(qIndex - 1);
+    if(idx === qIndex) {
+        if(newQueue.length > 0) playSong(newQueue, idx < newQueue.length ? idx : 0);
+        else {
+            audioRef.current.pause();
+            setCurrentSong(null);
+            setIsPlaying(false);
+        }
+    }
+  };
+
+  // --- 3. PLAYLISTS & LIKES ---
+  const toggleLike = async (item) => {
+    if(!user) return toast.error("Please Login");
+    const liked = isLiked(item.id);
+    const userRef = doc(db, "users", user.uid);
+    
+    if(liked) {
+        const toRemove = likedSongs.find(s=>String(s.id)===String(item.id));
+        if(toRemove) {
+            setLikedSongs(likedSongs.filter(s=>String(s.id)!==String(item.id)));
+            await updateDoc(userRef, { likedSongs: arrayRemove(toRemove) });
+            toast("Removed from Library", { icon: '💔' });
+        }
+    } else {
+        const clean = {
+            id: String(item.id), name: getName(item), primaryArtists: getDesc(item),
+            image: item.image||[], downloadUrl: item.downloadUrl||[], duration: item.duration||0
+        };
+        setLikedSongs([...likedSongs, clean]);
+        await updateDoc(userRef, { likedSongs: arrayUnion(clean) });
+        toast.success("Added to Library");
+    }
+  };
+
+  const createPlaylist = async () => {
+    if(!newPlaylistName.trim()) return;
+    try {
+        const ref = collection(db, `users/${user.uid}/playlists`);
+        await addDoc(ref, { name: newPlaylistName, songs: [] });
+        setNewPlaylistName("");
+        setShowPlaylistModal(false);
+        toast.success("Playlist Created");
+    } catch(e) { toast.error("Failed to create"); }
+  };
+
+  const addToPlaylist = async (playlistId) => {
+    if(!songToAdd) return;
+    try {
+        const ref = doc(db, `users/${user.uid}/playlists/${playlistId}`);
+        const clean = {
+            id: String(songToAdd.id), name: getName(songToAdd), primaryArtists: getDesc(songToAdd),
+            image: songToAdd.image||[], downloadUrl: songToAdd.downloadUrl||[]
+        };
+        await updateDoc(ref, { songs: arrayUnion(clean) });
+        toast.success("Added to Playlist");
+        setShowAddToPlaylistModal(false);
+    } catch(e) { toast.error("Failed to add"); }
+  };
+
+  // --- 4. DETAILS VIEW ---
+  const handleCardClick = async (item, type) => {
+    if (type === 'song') {
+      playSong([item], 0);
+    } else if (type === 'playlist_custom') {
+        setSelectedItem(item); setTab('details'); setDetailsSongs(item.songs || []);
+    } else {
+      setSelectedItem(item); setTab('details'); setLoading(true); setDetailsSongs([]);
+      try {
+        const url = type === 'album' ? `${API_BASE}/albums?id=${item.id}` : `${API_BASE}/playlists?id=${item.id}`;
+        const res = await fetch(url).then(r=>r.json());
+        if(res.success && res.data.songs) setDetailsSongs(res.data.songs);
+      } catch(e) { console.error(e); } finally { setLoading(false); }
+    }
+  };
+
+  // --- 5. AUTH & LIFECYCLE ---
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (u) => {
         if(u) {
             setUser(u); setView('app'); fetchHome();
             try {
-                const snap = await getDoc(doc(db, "users", u.uid));
-                if(snap.exists()) setLikedSongs(snap.data().likedSongs || []);
+                const userSnap = await getDoc(doc(db, "users", u.uid));
+                if(userSnap.exists()) setLikedSongs(userSnap.data().likedSongs || []);
                 else await setDoc(doc(db, "users", u.uid), { email: u.email, likedSongs: [] });
+
+                const q = query(collection(db, `users/${u.uid}/playlists`));
+                onSnapshot(q, (snapshot) => {
+                    const pl = snapshot.docs.map(d => ({id: d.id, ...d.data()}));
+                    setUserPlaylists(pl);
+                });
             } catch {}
         } else { setUser(null); setView('auth'); }
     });
@@ -202,6 +252,7 @@ function App() {
   }, []);
 
   const handleAuth = async () => {
+    const toastId = toast.loading("Authenticating...");
     try {
         if(authMode==='signup') {
             const c = await createUserWithEmailAndPassword(auth, authInput.email, authInput.password);
@@ -209,7 +260,8 @@ function App() {
         } else {
             await signInWithEmailAndPassword(auth, authInput.email, authInput.password);
         }
-    } catch(e) { alert(e.message); }
+        toast.success("Welcome!", { id: toastId });
+    } catch(e) { toast.error(e.message, { id: toastId }); }
   };
 
   useEffect(() => {
@@ -220,121 +272,181 @@ function App() {
     return () => { a.removeEventListener('timeupdate', t); a.removeEventListener('ended', e); };
   }, [queue, qIndex]);
 
-  // --- RENDER ---
-  if(view === 'loading') return <div style={{height:'100vh', display:'flex', justifyContent:'center', alignItems:'center', background:'black', color:'white'}}>Loading...</div>;
 
-  if(view === 'auth') return (
+  // --- RENDER ---
+  if(view==='loading') return <div style={{height:'100vh',background:'black',display:'flex',justifyContent:'center',alignItems:'center'}}>Loading...</div>;
+
+  if(view==='auth') return (
     <div className="auth-container">
+        <Toaster/>
         <div className="auth-box">
-            <h1 style={{color:'var(--primary)', marginBottom:30}}>Spotube Clone</h1>
+            <h1 style={{color:'var(--primary)', marginBottom:30}}>Musiq.</h1>
             <input className="auth-input" placeholder="Email" onChange={e=>setAuthInput({...authInput,email:e.target.value})}/>
             <input className="auth-input" type="password" placeholder="Password" onChange={e=>setAuthInput({...authInput,password:e.target.value})}/>
-            <button className="auth-btn" onClick={handleAuth}>{authMode==='login'?'Login':'Sign Up'}</button>
-            <p style={{marginTop:15, cursor:'pointer', color:'#aaa'}} onClick={()=>setAuthMode(authMode==='login'?'signup':'login')}>{authMode==='login'?'Create Account':'Have Account?'}</p>
+            <button className="auth-btn" onClick={handleAuth}>{authMode==='login'?'Sign In':'Sign Up'}</button>
+            <p style={{color:'#666', marginTop:20, cursor:'pointer'}} onClick={()=>setAuthMode(authMode==='login'?'signup':'login')}>{authMode==='login'?'Create Account':'Login'}</p>
         </div>
     </div>
   );
 
   return (
     <div className="app-layout">
-        {/* SIDEBAR */}
+        <Toaster position="top-center" toastOptions={{style:{background:'#333', color:'#fff'}}}/>
+
+        {/* --- OVERLAYS --- */}
+        {showLyrics && (
+            <div className="lyrics-overlay">
+                <button className="lyrics-close" onClick={()=>setShowLyrics(false)}>✕</button>
+                <div className="lyrics-content">{lyricsText}</div>
+            </div>
+        )}
+
+        {showQueue && (
+            <div className={`queue-sidebar ${showQueue?'open':''}`}>
+                <div className="queue-header">
+                    <span>Up Next</span>
+                    <button onClick={()=>setShowQueue(false)} style={{background:'none',border:'none',color:'white',cursor:'pointer'}}>✕</button>
+                </div>
+                <div className="queue-list">
+                    {queue.map((s, i) => (
+                        <div key={i} className={`queue-item ${i===qIndex?'active':''}`}>
+                            <img src={getImg(s.image)} alt="" onClick={()=>playSong(queue, i)}/>
+                            <div style={{flex:1}} onClick={()=>playSong(queue, i)}>
+                                <div style={{fontSize:'0.9rem', fontWeight:700, color:'white'}}>{getName(s)}</div>
+                                <div style={{fontSize:'0.8rem', color:'#aaa'}}>{getDesc(s)}</div>
+                            </div>
+                            <button onClick={()=>removeFromQueue(i)} style={{background:'none',border:'none',color:'#666',cursor:'pointer'}}><Icons.Trash/></button>
+                        </div>
+                    ))}
+                </div>
+            </div>
+        )}
+
+        {showPlaylistModal && (
+            <div className="modal-overlay">
+                <div className="modal-box">
+                    <h2>New Playlist</h2>
+                    <input className="modal-input" placeholder="Playlist Name" value={newPlaylistName} onChange={e=>setNewPlaylistName(e.target.value)}/>
+                    <div className="modal-actions">
+                        <button className="btn-cancel" onClick={()=>setShowPlaylistModal(false)}>Cancel</button>
+                        <button className="btn-confirm" onClick={createPlaylist}>Create</button>
+                    </div>
+                </div>
+            </div>
+        )}
+
+        {showAddToPlaylistModal && (
+            <div className="modal-overlay">
+                <div className="modal-box">
+                    <h2>Add to Playlist</h2>
+                    <div className="queue-list" style={{maxHeight:300}}>
+                        {userPlaylists.map(pl => (
+                            <div key={pl.id} className="queue-item" onClick={()=>addToPlaylist(pl.id)}>
+                                <div style={{width:40, height:40, background:'#333', borderRadius:8, display:'flex', alignItems:'center', justifyContent:'center'}}>🎵</div>
+                                <div>{pl.name}</div>
+                            </div>
+                        ))}
+                    </div>
+                    <button className="btn-cancel" style={{marginTop:20, width:'100%'}} onClick={()=>setShowAddToPlaylistModal(false)}>Cancel</button>
+                </div>
+            </div>
+        )}
+
+        {/* --- SIDEBAR --- */}
         <div className="sidebar">
-            <div className="brand">Spotube</div>
+            <div className="brand">Musiq.</div>
             <div className="nav-links">
-                <div className={`nav-item ${tab==='home'?'active':''}`} onClick={()=>{setTab('home'); setSearchQuery('');}}>
-                    <span className="nav-icon"><Icons.Home/></span> Home
-                </div>
-                <div className={`nav-item ${tab==='library'?'active':''}`} onClick={()=>setTab('library')}>
-                    <span className="nav-icon"><Icons.Library/></span> Library
-                </div>
+                <div className={`nav-item ${tab==='home'?'active':''}`} onClick={()=>setTab('home')}><Icons.Home/> Home</div>
+                <div className={`nav-item ${tab==='library'?'active':''}`} onClick={()=>setTab('library')}><Icons.Library/> Liked Songs</div>
+                
+                <div className="nav-section-title">My Playlists</div>
+                {userPlaylists.map(pl => (
+                    <div key={pl.id} className={`nav-item ${selectedItem?.id===pl.id?'active':''}`} onClick={()=>handleCardClick(pl, 'playlist_custom')}>
+                        <span style={{opacity:0.7}}>🎵</span> {pl.name}
+                    </div>
+                ))}
+                <button className="btn-create-playlist" onClick={()=>setShowPlaylistModal(true)}>
+                    <Icons.Plus/> Create Playlist
+                </button>
             </div>
         </div>
 
-        {/* MAIN CONTENT */}
+        {/* --- MAIN CONTENT --- */}
         <div className="main-content">
             <div className="header">
                 <div className="search-box">
                     <Icons.Search/>
-                    <input placeholder="Search songs, albums..." value={searchQuery} onChange={e=>setSearchQuery(e.target.value)} onKeyDown={e=>e.key==='Enter'&&doSearch()}/>
+                    <input placeholder="Search tracks..." value={searchQuery} onChange={e=>setSearchQuery(e.target.value)} onKeyDown={e=>e.key==='Enter'&&doSearch()}/>
                 </div>
                 <div className="user-pill" onClick={()=>signOut(auth)}>
-                    <div className="avatar">{user.email[0].toUpperCase()}</div>
-                    <span style={{fontSize:'0.85rem', fontWeight:600}}>Logout</span>
+                    <div className="avatar">{user.email ? user.email[0].toUpperCase() : 'U'}</div>
+                    <span>Logout</span>
                 </div>
             </div>
 
             <div className="scroll-area">
-                {loading && <div style={{textAlign:'center', padding:20, color:'#666'}}>Loading...</div>}
-
-                {/* DETAILS PAGE */}
+                {/* DETAILS */}
                 {tab === 'details' && selectedItem && (
                     <div className="details-view">
                         <button className="btn-back" onClick={()=>setTab('home')}>← Back</button>
                         <div className="details-header">
-                            <img className="details-art" src={getImg(selectedItem.image)} alt=""/>
+                            <img className="details-art" src={getImg(selectedItem.image || selectedItem.songs?.[0]?.image)} alt=""/>
                             <div className="details-meta">
                                 <h1>{getName(selectedItem)}</h1>
-                                <p>{getDesc(selectedItem)}</p>
+                                <p>{selectedItem.songs ? `${selectedItem.songs.length} Songs` : getDesc(selectedItem)}</p>
                                 <button className="btn-play-all" onClick={()=>playSong(detailsSongs, 0)}>Play All</button>
                             </div>
                         </div>
                         <div className="track-list">
-                            {detailsSongs.map((s, i)=>(
-                                <div key={s.id} className="track-row" onClick={()=>playSong(detailsSongs, i)}>
-                                    <span className="track-num">{i+1}</span>
-                                    <img className="track-img" src={getImg(s.image)} alt=""/>
-                                    <div className="track-info">
-                                        <div className="track-title">{getName(s)}</div>
-                                        <div className="track-artist">{s.primaryArtists}</div>
+                            {detailsSongs.map((s, i) => (
+                                <div key={i} className="track-row">
+                                    <div style={{display:'flex', alignItems:'center', flex:1}} onClick={()=>playSong(detailsSongs, i)}>
+                                        <span className="track-num">{i+1}</span>
+                                        <img className="track-img" src={getImg(s.image)} alt=""/>
+                                        <div className="track-info">
+                                            <div className="track-title">{getName(s)}</div>
+                                            <div className="track-artist">{getDesc(s)}</div>
+                                        </div>
                                     </div>
-                                    {/* HEART IN DETAILS LIST */}
-                                    <button 
-                                        className={`btn-like-list ${isLiked(s.id)?'liked':''}`} 
-                                        onClick={(e)=>{e.stopPropagation(); toggleLike(s);}}
-                                    >♥</button>
-                                    <span className="track-dur">{Math.floor(s.duration/60)}:{String(s.duration%60).padStart(2,'0')}</span>
+                                    <div className="track-actions">
+                                        <button className={`btn-icon ${isLiked(s.id)?'active':''}`} style={isLiked(s.id)?{color:'#ffb4a9'}:{}} onClick={()=>toggleLike(s)}><Icons.Heart/></button>
+                                        <button className="btn-icon" onClick={()=>{setSongToAdd(s); setShowAddToPlaylistModal(true);}}><Icons.Plus/></button>
+                                    </div>
+                                    <div className="track-dur">{Math.floor(s.duration/60)}:{String(s.duration%60).padStart(2,'0')}</div>
                                 </div>
                             ))}
                         </div>
                     </div>
                 )}
 
-                {/* SEARCH RESULTS */}
+                {/* SEARCH */}
                 {tab === 'search' && (
-                    <>
-                        {resSongs.length>0 && (
-                            <div className="section">
-                                <div className="section-header"><div className="section-title">Songs</div></div>
-                                <div className="grid">
-                                    {resSongs.map(i=>(
-                                        <div key={i.id} className="card" onClick={()=>handleCardClick(i, 'song')}>
-                                            <img src={getImg(i.image)} alt=""/>
-                                            <h3>{getName(i)}</h3>
-                                            <p>{i.primaryArtists}</p>
-                                            <button 
-                                                className={`card-heart ${isLiked(i.id)?'liked':''}`} 
-                                                onClick={(e)=>{e.stopPropagation(); toggleLike(i)}}
-                                            >♥</button>
-                                        </div>
-                                    ))}
+                    <div className="section">
+                        <div className="section-header">Results</div>
+                        <div className="grid">
+                            {resSongs.map(s => (
+                                <div key={s.id} className="card" onClick={()=>handleCardClick(s, 'song')}>
+                                    <img src={getImg(s.image)} alt=""/>
+                                    <h3>{getName(s)}</h3>
+                                    <p>{getDesc(s)}</p>
+                                    <div className="card-actions">
+                                        <button className={`btn-card-action ${isLiked(s.id)?'liked':''}`} onClick={(e)=>{e.stopPropagation(); toggleLike(s)}}><Icons.Heart/></button>
+                                        <button className="btn-card-action" onClick={(e)=>{e.stopPropagation(); setSongToAdd(s); setShowAddToPlaylistModal(true);}}><Icons.Plus/></button>
+                                    </div>
                                 </div>
-                            </div>
-                        )}
-                        {resAlbums.length>0 && (
-                            <div className="section">
-                                <div className="section-header"><div className="section-title">Albums</div></div>
-                                <div className="horizontal-scroll">
-                                    {resAlbums.map(i=>(
-                                        <div key={i.id} className="card" onClick={()=>handleCardClick(i, 'album')}>
-                                            <img src={getImg(i.image)} alt=""/>
-                                            <h3>{getName(i)}</h3>
-                                            <p>{i.year}</p>
-                                        </div>
-                                    ))}
+                            ))}
+                        </div>
+                        <div className="section-header" style={{marginTop:40}}>Albums</div>
+                        <div className="horizontal-scroll">
+                            {resAlbums.map(a => (
+                                <div key={a.id} className="card" onClick={()=>handleCardClick(a, 'album')}>
+                                    <img src={getImg(a.image)} alt=""/>
+                                    <h3>{getName(a)}</h3>
+                                    <p>{a.year}</p>
                                 </div>
-                            </div>
-                        )}
-                    </>
+                            ))}
+                        </div>
+                    </div>
                 )}
 
                 {/* HOME */}
@@ -342,34 +454,31 @@ function App() {
                     <>
                         <div className="hero">
                             <h1>Welcome Back</h1>
-                            <p>Discover new music, fresh albums, and curated playlists just for you.</p>
                         </div>
                         <div className="section">
-                            <div className="section-header"><div className="section-title">Trending Songs</div></div>
+                            <div className="section-header">Trending Songs</div>
                             <div className="horizontal-scroll">
-                                {trendingSongs.map(i=>(
-                                    <div key={i.id} className="card" onClick={()=>handleCardClick(i, 'song')}>
-                                        <img src={getImg(i.image)} alt=""/>
-                                        <h3>{getName(i)}</h3>
-                                        <p>{i.primaryArtists}</p>
-                                        {/* HEART IN CARD */}
-                                        <button 
-                                            className={`card-heart ${isLiked(i.id)?'liked':''}`} 
-                                            onClick={(e)=>{e.stopPropagation(); toggleLike(i)}}
-                                        >♥</button>
+                                {homeData.trending.map(s => (
+                                    <div key={s.id} className="card" onClick={()=>handleCardClick(s, 'song')}>
+                                        <img src={getImg(s.image)} alt=""/>
+                                        <h3>{getName(s)}</h3>
+                                        <p>{getDesc(s)}</p>
+                                        <div className="card-actions">
+                                            <button className={`btn-card-action ${isLiked(s.id)?'liked':''}`} onClick={(e)=>{e.stopPropagation(); toggleLike(s)}}><Icons.Heart/></button>
+                                            <button className="btn-card-action" onClick={(e)=>{e.stopPropagation(); setSongToAdd(s); setShowAddToPlaylistModal(true);}}><Icons.Plus/></button>
+                                        </div>
                                     </div>
                                 ))}
                             </div>
                         </div>
                         <div className="section">
-                            <div className="section-header"><div className="section-title">Fresh Albums</div></div>
+                            <div className="section-header">New Albums</div>
                             <div className="horizontal-scroll">
-                                {newAlbums.map(i=>(
-                                    <div key={i.id} className="card" onClick={()=>handleCardClick(i, 'album')}>
-                                        <img src={getImg(i.image)} alt=""/>
-                                        <h3>{getName(i)}</h3>
-                                        <p>{i.year}</p>
-                                        {/* Note: Liking albums as whole objects can be messy, kept to songs mostly */}
+                                {homeData.albums.map(a => (
+                                    <div key={a.id} className="card" onClick={()=>handleCardClick(a, 'album')}>
+                                        <img src={getImg(a.image)} alt=""/>
+                                        <h3>{getName(a)}</h3>
+                                        <p>{a.year}</p>
                                     </div>
                                 ))}
                             </div>
@@ -380,17 +489,16 @@ function App() {
                 {/* LIBRARY */}
                 {tab === 'library' && (
                     <div className="section">
-                        <div className="section-header"><div className="section-title">Liked Songs</div></div>
+                        <div className="section-header">Liked Songs</div>
                         <div className="grid">
-                            {likedSongs.map((i, idx)=>(
-                                <div key={i.id} className="card" onClick={()=>playSong(likedSongs, idx)}>
-                                    <img src={getImg(i.image)} alt=""/>
-                                    <h3>{getName(i)}</h3>
-                                    <p>{i.primaryArtists}</p>
-                                    <button 
-                                        className="card-heart liked" 
-                                        onClick={(e)=>{e.stopPropagation(); toggleLike(i)}}
-                                    >♥</button>
+                            {likedSongs.map((s, i) => (
+                                <div key={s.id} className="card" onClick={()=>playSong(likedSongs, i)}>
+                                    <img src={getImg(s.image)} alt=""/>
+                                    <h3>{getName(s)}</h3>
+                                    <p>{getDesc(s)}</p>
+                                    <div className="card-actions" style={{opacity:1}}>
+                                        <button className="btn-card-action liked" onClick={(e)=>{e.stopPropagation(); toggleLike(s)}}><Icons.Heart/></button>
+                                    </div>
                                 </div>
                             ))}
                         </div>
@@ -399,21 +507,8 @@ function App() {
             </div>
         </div>
 
-        {/* BOTTOM NAV */}
-        <div className="bottom-nav">
-            <div className={`nav-tab ${tab==='home'?'active':''}`} onClick={()=>setTab('home')}>
-                <Icons.Home/><span>Home</span>
-            </div>
-            <div className={`nav-tab ${tab==='search'?'active':''}`} onClick={()=>{setTab('search'); document.querySelector('.search-box input')?.focus()}}>
-                <Icons.Search/><span>Search</span>
-            </div>
-            <div className={`nav-tab ${tab==='library'?'active':''}`} onClick={()=>setTab('library')}>
-                <Icons.Library/><span>Library</span>
-            </div>
-        </div>
-
-        {/* PLAYER BAR */}
-        <div className={`player-bar ${currentSong ? 'visible' : ''}`}>
+        {/* --- PLAYER BAR --- */}
+        <div className={`player-bar ${currentSong ? 'visible' : ''}`} style={{transform: currentSong ? 'translateY(0)' : 'translateY(100%)', transition:'transform 0.3s'}}>
             {currentSong && (
                 <>
                     <div className="p-track">
@@ -425,31 +520,25 @@ function App() {
                     </div>
                     <div className="p-center">
                         <div className="p-controls">
-                            <button className="btn-control" onClick={()=>playSong(queue, qIndex-1)}><Icons.SkipBack/></button>
+                            <button className="btn-icon" onClick={()=>playSong(queue, qIndex-1)}><Icons.SkipBack/></button>
                             <button className="btn-play" onClick={togglePlay}>{isPlaying ? <Icons.Pause/> : <Icons.Play/>}</button>
-                            <button className="btn-control" onClick={()=>playSong(queue, qIndex+1)}><Icons.SkipFwd/></button>
-                        </div>
-                        <div className="progress-container">
-                            <span className="time-text">{Math.floor(progress/60)}:{String(Math.floor(progress%60)).padStart(2,'0')}</span>
-                            <div className="progress-rail" onClick={(e)=>{
-                                const w = e.currentTarget.clientWidth;
-                                const x = e.nativeEvent.offsetX;
-                                audioRef.current.currentTime = (x/w)*duration;
-                            }}>
-                                <div className="progress-fill" style={{width:`${(progress/duration)*100}%`}}></div>
-                            </div>
-                            <span className="time-text">{Math.floor(duration/60)}:{String(Math.floor(duration%60)).padStart(2,'0')}</span>
+                            <button className="btn-icon" onClick={()=>playSong(queue, qIndex+1)}><Icons.SkipFwd/></button>
                         </div>
                     </div>
                     <div className="p-right">
-                        <input type="range" className="volume-slider" min="0" max="1" step="0.1" value={volume} onChange={(e)=>{setVolume(e.target.value); audioRef.current.volume=e.target.value}}/>
-                        <select className="quality-select" value={quality} onChange={(e)=>{setQuality(e.target.value);}}>
-                            <option value="320kbps">HQ</option>
-                            <option value="160kbps">SQ</option>
-                        </select>
+                        <button className={`btn-icon ${showLyrics?'active':''}`} onClick={fetchLyrics}><Icons.Mic/></button>
+                        <button className={`btn-icon ${showQueue?'active':''}`} onClick={()=>setShowQueue(!showQueue)}><Icons.List/></button>
+                        <input type="range" className="volume-slider" min="0" max="1" step="0.1" value={volume} onChange={e=>{setVolume(e.target.value); audioRef.current.volume=e.target.value}}/>
                     </div>
                 </>
             )}
+        </div>
+
+        {/* BOTTOM NAV (Mobile) */}
+        <div className="bottom-nav">
+            <div className={`nav-tab ${tab==='home'?'active':''}`} onClick={()=>setTab('home')}><Icons.Home/> Home</div>
+            <div className={`nav-tab ${tab==='search'?'active':''}`} onClick={()=>setTab('search')}><Icons.Search/> Search</div>
+            <div className={`nav-tab ${tab==='library'?'active':''}`} onClick={()=>setTab('library')}><Icons.Library/> Library</div>
         </div>
     </div>
   );
