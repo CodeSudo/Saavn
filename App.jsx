@@ -2,24 +2,26 @@ import React, { useState, useRef, useEffect } from 'react';
 import './App.css';
 import toast, { Toaster } from 'react-hot-toast';
 
-// --- 1. FIXED ICONS (Prevents Black Screen) ---
+// --- ICONS (ALL REQUIRED) ---
 const Icons = {
   Home: () => <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/></svg>,
   Search: () => <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>,
   Library: () => <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>,
   Play: () => <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>,
   Pause: () => <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>,
-  // Renamed these to match usage below
   SkipFwd: () => <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 4 15 12 5 20 5 4"/><line x1="19" y1="5" x2="19" y2="19"/></svg>,
   SkipBack: () => <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><polygon points="19 20 9 12 19 4 19 20"/><line x1="5" y1="19" x2="5" y2="5"/></svg>,
   Plus: () => <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>,
   List: () => <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>,
   Mic: () => <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>,
   Heart: () => <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>,
-  Trash: () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+  Trash: () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>,
+  Shuffle: () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="16 3 21 3 21 8"/><line x1="4" y1="20" x2="21" y2="3"/><polyline points="21 16 21 21 16 21"/><line x1="15" y1="15" x2="21" y2="21"/><line x1="4" y1="4" x2="9" y2="9"/></svg>,
+  Repeat: () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>,
+  RepeatOne: () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/><text x="10" y="15" fontSize="8" fill="currentColor" style={{fontWeight:'bold'}}>1</text></svg>,
 };
 
-// FIREBASE Imports
+// FIREBASE
 import { auth, db } from './firebase'; 
 import { signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, onAuthStateChanged } from 'firebase/auth';
 import { doc, setDoc, getDoc, updateDoc, arrayUnion, arrayRemove, collection, addDoc, onSnapshot, query } from 'firebase/firestore';
@@ -27,25 +29,25 @@ import { doc, setDoc, getDoc, updateDoc, arrayUnion, arrayRemove, collection, ad
 const API_BASE = "https://saavn.sumit.co/api";
 
 function App() {
-  // --- UI STATE ---
+  // UI State
   const [view, setView] = useState('loading'); 
   const [tab, setTab] = useState('home');   
   const [loading, setLoading] = useState(false);
 
-  // --- USER STATE ---
+  // User State
   const [user, setUser] = useState(null);
   const [likedSongs, setLikedSongs] = useState([]);
   const [userPlaylists, setUserPlaylists] = useState([]); 
   const [authMode, setAuthMode] = useState('login');
   const [authInput, setAuthInput] = useState({ email: '', password: '' });
 
-  // --- DATA STATE ---
+  // Data State
   const [searchQuery, setSearchQuery] = useState('');
   const [resSongs, setResSongs] = useState([]);
   const [resAlbums, setResAlbums] = useState([]);
   const [homeData, setHomeData] = useState({ trending:[], albums:[], playlists:[] });
   
-  // --- DETAILS & MODALS ---
+  // App Logic
   const [selectedItem, setSelectedItem] = useState(null);
   const [detailsSongs, setDetailsSongs] = useState([]);
   const [showLyrics, setShowLyrics] = useState(false);
@@ -56,7 +58,7 @@ function App() {
   const [songToAdd, setSongToAdd] = useState(null);
   const [newPlaylistName, setNewPlaylistName] = useState("");
 
-  // --- PLAYER STATE ---
+  // Player State
   const audioRef = useRef(new Audio());
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentSong, setCurrentSong] = useState(null);
@@ -65,19 +67,16 @@ function App() {
   const [progress, setProgress] = useState(0);
   const [duration, setDuration] = useState(0);
   const [volume, setVolume] = useState(1);
-  const [quality, setQuality] = useState('320kbps');
+  const [isShuffle, setIsShuffle] = useState(false);
+  const [repeatMode, setRepeatMode] = useState('none'); // 'none', 'all', 'one'
 
   // --- HELPERS ---
-  const getImg = (i) => {
-    if(!i) return "https://via.placeholder.com/150";
-    if(Array.isArray(i)) return i[i.length-1]?.url || i[0]?.url;
-    return i;
-  }
+  const getImg = (i) => { if(Array.isArray(i)) return i[i.length-1]?.url || i[0]?.url; return i || "https://via.placeholder.com/150"; }
   const getName = (i) => i?.name || i?.title || "Unknown";
   const getDesc = (i) => i?.primaryArtists || i?.description || i?.year || "";
   const isLiked = (id) => likedSongs.some(s => String(s.id) === String(id));
 
-  // --- 1. DATA FETCHING ---
+  // --- DATA FETCHING ---
   const fetchHome = async () => {
     setLoading(true);
     try {
@@ -86,11 +85,7 @@ function App() {
         fetch(`${API_BASE}/search/albums?query=New&limit=15`).then(r=>r.json()).catch(()=>({})),
         fetch(`${API_BASE}/search/playlists?query=Hits&limit=15`).then(r=>r.json()).catch(()=>({}))
       ]);
-      setHomeData({ 
-        trending: s?.data?.results || [], 
-        albums: a?.data?.results || [], 
-        playlists: p?.data?.results || [] 
-      });
+      setHomeData({ trending: s?.data?.results || [], albums: a?.data?.results || [], playlists: p?.data?.results || [] });
     } catch(e) { console.error(e); } finally { setLoading(false); }
   };
 
@@ -110,7 +105,6 @@ function App() {
   const fetchLyrics = async () => {
     if(!currentSong) return;
     if(showLyrics) { setShowLyrics(false); return; }
-    
     const toastId = toast.loading("Fetching lyrics...");
     try {
         const res = await fetch(`${API_BASE}/lyrics?id=${currentSong.id}`);
@@ -119,13 +113,11 @@ function App() {
             setLyricsText(data.data.lyrics.replace(/<br>/g, "\n"));
             setShowLyrics(true);
             toast.success("Lyrics loaded", { id: toastId });
-        } else {
-            toast.error("Lyrics not available", { id: toastId });
-        }
+        } else { toast.error("Lyrics not available", { id: toastId }); }
     } catch(e) { toast.error("Error loading lyrics", { id: toastId }); }
   };
 
-  // --- 2. PLAYER LOGIC ---
+  // --- PLAYER ENGINE ---
   const playSong = (list, idx) => {
     if(!list || idx < 0 || !list[idx]) return;
     if(list !== queue) setQueue(list);
@@ -133,16 +125,14 @@ function App() {
     const s = list[idx];
     setCurrentSong(s);
     
-    const url = s.downloadUrl?.find(u=>u.quality===quality)?.url || s.downloadUrl?.[0]?.url;
+    const url = s.downloadUrl?.find(u=>u.quality==='320kbps')?.url || s.downloadUrl?.[0]?.url;
     if(url) {
         if(audioRef.current.src !== url) {
             audioRef.current.src = url;
             audioRef.current.volume = volume;
             audioRef.current.play().catch(()=>{});
             setIsPlaying(true);
-        } else {
-            audioRef.current.play(); setIsPlaying(true);
-        }
+        } else { audioRef.current.play(); setIsPlaying(true); }
     } else toast.error("Audio unavailable");
   };
 
@@ -151,26 +141,31 @@ function App() {
     else { audioRef.current.pause(); setIsPlaying(false); }
   };
 
+  const toggleRepeat = () => {
+    setRepeatMode(prev => prev === 'none' ? 'all' : prev === 'all' ? 'one' : 'none');
+    toast(repeatMode === 'none' ? 'Repeat All' : repeatMode === 'all' ? 'Repeat One' : 'Repeat Off');
+  };
+
+  const toggleShuffle = () => {
+    setIsShuffle(!isShuffle);
+    toast(!isShuffle ? 'Shuffle On' : 'Shuffle Off');
+  };
+
   const removeFromQueue = (idx) => {
     const newQueue = queue.filter((_, i) => i !== idx);
     setQueue(newQueue);
     if(idx < qIndex) setQIndex(qIndex - 1);
     if(idx === qIndex) {
         if(newQueue.length > 0) playSong(newQueue, idx < newQueue.length ? idx : 0);
-        else {
-            audioRef.current.pause();
-            setCurrentSong(null);
-            setIsPlaying(false);
-        }
+        else { audioRef.current.pause(); setCurrentSong(null); setIsPlaying(false); }
     }
   };
 
-  // --- 3. PLAYLISTS & LIKES ---
+  // --- PLAYLIST & LIKE LOGIC ---
   const toggleLike = async (item) => {
     if(!user) return toast.error("Please Login");
     const liked = isLiked(item.id);
     const userRef = doc(db, "users", user.uid);
-    
     if(liked) {
         const toRemove = likedSongs.find(s=>String(s.id)===String(item.id));
         if(toRemove) {
@@ -179,10 +174,7 @@ function App() {
             toast("Removed from Library", { icon: '💔' });
         }
     } else {
-        const clean = {
-            id: String(item.id), name: getName(item), primaryArtists: getDesc(item),
-            image: item.image||[], downloadUrl: item.downloadUrl||[], duration: item.duration||0
-        };
+        const clean = { id: String(item.id), name: getName(item), primaryArtists: getDesc(item), image: item.image||[], downloadUrl: item.downloadUrl||[], duration: item.duration||0 };
         setLikedSongs([...likedSongs, clean]);
         await updateDoc(userRef, { likedSongs: arrayUnion(clean) });
         toast.success("Added to Library");
@@ -194,33 +186,24 @@ function App() {
     try {
         const ref = collection(db, `users/${user.uid}/playlists`);
         await addDoc(ref, { name: newPlaylistName, songs: [] });
-        setNewPlaylistName("");
-        setShowPlaylistModal(false);
-        toast.success("Playlist Created");
-    } catch(e) { toast.error("Failed to create"); }
+        setNewPlaylistName(""); setShowPlaylistModal(false); toast.success("Playlist Created");
+    } catch(e) { toast.error("Failed"); }
   };
 
   const addToPlaylist = async (playlistId) => {
     if(!songToAdd) return;
     try {
         const ref = doc(db, `users/${user.uid}/playlists/${playlistId}`);
-        const clean = {
-            id: String(songToAdd.id), name: getName(songToAdd), primaryArtists: getDesc(songToAdd),
-            image: songToAdd.image||[], downloadUrl: songToAdd.downloadUrl||[]
-        };
+        const clean = { id: String(songToAdd.id), name: getName(songToAdd), primaryArtists: getDesc(songToAdd), image: songToAdd.image||[], downloadUrl: songToAdd.downloadUrl||[] };
         await updateDoc(ref, { songs: arrayUnion(clean) });
-        toast.success("Added to Playlist");
-        setShowAddToPlaylistModal(false);
-    } catch(e) { toast.error("Failed to add"); }
+        toast.success("Added to Playlist"); setShowAddToPlaylistModal(false);
+    } catch(e) { toast.error("Failed"); }
   };
 
-  // --- 4. DETAILS VIEW ---
   const handleCardClick = async (item, type) => {
-    if (type === 'song') {
-      playSong([item], 0);
-    } else if (type === 'playlist_custom') {
-        setSelectedItem(item); setTab('details'); setDetailsSongs(item.songs || []);
-    } else {
+    if (type === 'song') { playSong([item], 0); }
+    else if (type === 'playlist_custom') { setSelectedItem(item); setTab('details'); setDetailsSongs(item.songs || []); }
+    else {
       setSelectedItem(item); setTab('details'); setLoading(true); setDetailsSongs([]);
       try {
         const url = type === 'album' ? `${API_BASE}/albums?id=${item.id}` : `${API_BASE}/playlists?id=${item.id}`;
@@ -230,7 +213,7 @@ function App() {
     }
   };
 
-  // --- 5. AUTH & LIFECYCLE ---
+  // --- EFFECTS (Auth, Audio, Keys, Title) ---
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (u) => {
         if(u) {
@@ -239,12 +222,8 @@ function App() {
                 const userSnap = await getDoc(doc(db, "users", u.uid));
                 if(userSnap.exists()) setLikedSongs(userSnap.data().likedSongs || []);
                 else await setDoc(doc(db, "users", u.uid), { email: u.email, likedSongs: [] });
-
                 const q = query(collection(db, `users/${u.uid}/playlists`));
-                onSnapshot(q, (snapshot) => {
-                    const pl = snapshot.docs.map(d => ({id: d.id, ...d.data()}));
-                    setUserPlaylists(pl);
-                });
+                onSnapshot(q, (snapshot) => setUserPlaylists(snapshot.docs.map(d => ({id: d.id, ...d.data()}))));
             } catch {}
         } else { setUser(null); setView('auth'); }
     });
@@ -257,21 +236,42 @@ function App() {
         if(authMode==='signup') {
             const c = await createUserWithEmailAndPassword(auth, authInput.email, authInput.password);
             await setDoc(doc(db, "users", c.user.uid), { email: authInput.email, likedSongs: [] });
-        } else {
-            await signInWithEmailAndPassword(auth, authInput.email, authInput.password);
-        }
+        } else { await signInWithEmailAndPassword(auth, authInput.email, authInput.password); }
         toast.success("Welcome!", { id: toastId });
     } catch(e) { toast.error(e.message, { id: toastId }); }
   };
 
+  // Audio Event Listeners
   useEffect(() => {
     const a = audioRef.current;
-    const t = () => { setProgress(a.currentTime); setDuration(a.duration||0); };
-    const e = () => playSong(queue, qIndex+1);
-    a.addEventListener('timeupdate', t); a.addEventListener('ended', e);
-    return () => { a.removeEventListener('timeupdate', t); a.removeEventListener('ended', e); };
-  }, [queue, qIndex]);
+    const updateTime = () => { setProgress(a.currentTime); setDuration(a.duration||0); };
+    const handleEnd = () => {
+      if(repeatMode === 'one') { a.currentTime = 0; a.play(); }
+      else if(isShuffle) { playSong(queue, Math.floor(Math.random() * queue.length)); }
+      else if(qIndex < queue.length - 1) { playSong(queue, qIndex + 1); }
+      else if(repeatMode === 'all') { playSong(queue, 0); }
+      else { setIsPlaying(false); }
+    };
+    a.addEventListener('timeupdate', updateTime); a.addEventListener('ended', handleEnd);
+    return () => { a.removeEventListener('timeupdate', updateTime); a.removeEventListener('ended', handleEnd); };
+  }, [queue, qIndex, repeatMode, isShuffle]);
 
+  // Keyboard Shortcuts
+  useEffect(() => {
+    const handleKey = (e) => {
+        if(e.target.tagName==='INPUT') return;
+        if(e.code==='Space') { e.preventDefault(); togglePlay(); }
+        if(e.code==='ArrowRight') audioRef.current.currentTime += 5;
+        if(e.code==='ArrowLeft') audioRef.current.currentTime -= 5;
+    };
+    window.addEventListener('keydown', handleKey);
+    return () => window.removeEventListener('keydown', handleKey);
+  }, [isPlaying]);
+
+  // Document Title
+  useEffect(() => {
+    document.title = currentSong ? `${getName(currentSong)} • Musiq` : "Musiq Web Player";
+  }, [currentSong]);
 
   // --- RENDER ---
   if(view==='loading') return <div style={{height:'100vh',background:'black',display:'flex',justifyContent:'center',alignItems:'center'}}>Loading...</div>;
@@ -379,7 +379,7 @@ function App() {
                     <input placeholder="Search tracks..." value={searchQuery} onChange={e=>setSearchQuery(e.target.value)} onKeyDown={e=>e.key==='Enter'&&doSearch()}/>
                 </div>
                 <div className="user-pill" onClick={()=>signOut(auth)}>
-                    <div className="avatar">{user.email ? user.email[0].toUpperCase() : 'U'}</div>
+                    <div className="avatar">{user.email[0].toUpperCase()}</div>
                     <span>Logout</span>
                 </div>
             </div>
@@ -409,8 +409,8 @@ function App() {
                                         </div>
                                     </div>
                                     <div className="track-actions">
-                                        <button className={`btn-icon ${isLiked(s.id)?'active':''}`} style={isLiked(s.id)?{color:'#ffb4a9'}:{}} onClick={()=>toggleLike(s)}><Icons.Heart/></button>
-                                        <button className="btn-icon" onClick={()=>{setSongToAdd(s); setShowAddToPlaylistModal(true);}}><Icons.Plus/></button>
+                                        <button className={`icon-action ${isLiked(s.id)?'liked':''}`} onClick={()=>toggleLike(s)}><Icons.Heart/></button>
+                                        <button className="icon-action" onClick={()=>{setSongToAdd(s); setShowAddToPlaylistModal(true);}}><Icons.Plus/></button>
                                     </div>
                                     <div className="track-dur">{Math.floor(s.duration/60)}:{String(s.duration%60).padStart(2,'0')}</div>
                                 </div>
@@ -520,9 +520,13 @@ function App() {
                     </div>
                     <div className="p-center">
                         <div className="p-controls">
+                            <button className={`btn-icon ${isShuffle?'active':''}`} onClick={toggleShuffle}><Icons.Shuffle/></button>
                             <button className="btn-icon" onClick={()=>playSong(queue, qIndex-1)}><Icons.SkipBack/></button>
                             <button className="btn-play" onClick={togglePlay}>{isPlaying ? <Icons.Pause/> : <Icons.Play/>}</button>
                             <button className="btn-icon" onClick={()=>playSong(queue, qIndex+1)}><Icons.SkipFwd/></button>
+                            <button className={`btn-icon ${repeatMode!=='none'?'active':''}`} onClick={toggleRepeat}>
+                                {repeatMode==='one' ? <Icons.RepeatOne/> : <Icons.Repeat/>}
+                            </button>
                         </div>
                     </div>
                     <div className="p-right">
