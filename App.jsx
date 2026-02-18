@@ -1,5 +1,15 @@
 import React, { useState, useRef, useEffect } from 'react';
 import './App.css';
+import { auth, db } from './firebase'; 
+import { 
+  signInWithEmailAndPassword, 
+  createUserWithEmailAndPassword, 
+  signOut, 
+  onAuthStateChanged 
+} from 'firebase/auth';
+import { 
+  doc, setDoc, getDoc, updateDoc, arrayUnion, arrayRemove 
+} from 'firebase/firestore';
 
 const API_BASE = "https://saavn.sumit.co/api";
 
@@ -9,16 +19,17 @@ function App() {
   const [tab, setTab] = useState('home');   
   const [loading, setLoading] = useState(false);
 
-  // User State (Local Storage)
+  // User State
   const [user, setUser] = useState(null);
+  const [likedSongs, setLikedSongs] = useState([]);
   const [authMode, setAuthMode] = useState('login');
-  const [authInput, setAuthInput] = useState({ username: '', password: '' });
+  const [authInput, setAuthInput] = useState({ email: '', password: '' });
 
   // Data State
   const [searchQuery, setSearchQuery] = useState('');
-  const [searchResults, setSearchResults] = useState([]); // For manual search
+  const [searchResults, setSearchResults] = useState([]);
   
-  // Homepage Sections Data
+  // Homepage Sections
   const [trendingSongs, setTrendingSongs] = useState([]);
   const [newAlbums, setNewAlbums] = useState([]);
   const [topPlaylists, setTopPlaylists] = useState([]);
@@ -35,51 +46,50 @@ function App() {
   const [volume, setVolume] = useState(1);
 
   // ==============================
-  // 1. AUTH (Local Storage)
+  // 1. AUTHENTICATION
   // ==============================
   useEffect(() => {
-    const stored = localStorage.getItem('musiq_user');
-    if (stored) {
-      setUser(JSON.parse(stored));
-      setView('app');
-    }
+    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
+      if (currentUser) {
+        setUser(currentUser);
+        setView('app');
+        fetchHomepageData(); // Load home data on login
+        
+        try {
+          const docRef = doc(db, "users", currentUser.uid);
+          const docSnap = await getDoc(docRef);
+          if (docSnap.exists()) {
+            setLikedSongs(docSnap.data().likedSongs || []);
+          } else {
+            await setDoc(docRef, { email: currentUser.email, likedSongs: [] });
+          }
+        } catch (err) { console.error(err); }
+      } else {
+        setUser(null);
+        setLikedSongs([]);
+        setView('auth');
+      }
+    });
+    return () => unsubscribe();
   }, []);
 
-  // Fetch Homepage Data on Login
-  useEffect(() => {
-    if (user && view === 'app') {
-      fetchHomepageData();
-    }
-  }, [user, view]);
-
-  const handleAuth = () => {
-    if (!authInput.username || !authInput.password) return alert("Fill all fields");
-    const dbUsers = JSON.parse(localStorage.getItem('musiq_users') || "[]");
-
-    if (authMode === 'signup') {
-      if (dbUsers.find(u => u.username === authInput.username)) return alert("Username taken");
-      const newUser = { ...authInput, likedSongs: [] };
-      dbUsers.push(newUser);
-      localStorage.setItem('musiq_users', JSON.stringify(dbUsers));
-      login(newUser);
-    } else {
-      const found = dbUsers.find(u => u.username === authInput.username && u.password === authInput.password);
-      if (found) login(found);
-      else alert("Invalid credentials");
-    }
+  const handleAuth = async () => {
+    if (!authInput.email || !authInput.password) return alert("Fill all fields");
+    try {
+      if (authMode === 'signup') {
+        const cred = await createUserWithEmailAndPassword(auth, authInput.email, authInput.password);
+        await setDoc(doc(db, "users", cred.user.uid), { email: authInput.email, likedSongs: [] });
+      } else {
+        await signInWithEmailAndPassword(auth, authInput.email, authInput.password);
+      }
+    } catch (e) { alert(e.message); }
   };
 
-  const login = (u) => {
-    setUser(u);
-    localStorage.setItem('musiq_user', JSON.stringify(u));
-    setView('app');
-    setAuthInput({ username: '', password: '' });
-  };
-
-  const logout = () => {
-    setUser(null); localStorage.removeItem('musiq_user');
-    setView('auth'); setCurrentSong(null); setIsPlaying(false);
+  const logout = async () => {
+    await signOut(auth);
     audioRef.current.pause();
+    setIsPlaying(false);
+    setCurrentSong(null);
   };
 
   // ==============================
@@ -88,47 +98,35 @@ function App() {
   const fetchHomepageData = async () => {
     setLoading(true);
     try {
-      // 1. Fetch Trending Songs
-      const songsRes = await fetch(`${API_BASE}/search/songs?query=Top 50&limit=15`);
-      const songsData = await songsRes.json();
-      if(songsData.success) setTrendingSongs(songsData.data.results);
+      const [songs, albums, playlists] = await Promise.all([
+        fetch(`${API_BASE}/search/songs?query=Top 50&limit=15`).then(r => r.json()),
+        fetch(`${API_BASE}/search/albums?query=New&limit=15`).then(r => r.json()),
+        fetch(`${API_BASE}/search/playlists?query=Hits&limit=15`).then(r => r.json())
+      ]);
 
-      // 2. Fetch New Albums
-      const albumsRes = await fetch(`${API_BASE}/search/albums?query=New&limit=15`);
-      const albumsData = await albumsRes.json();
-      if(albumsData.success) setNewAlbums(albumsData.data.results);
+      if(songs.success) setTrendingSongs(songs.data.results);
+      if(albums.success) setNewAlbums(albums.data.results);
+      if(playlists.success) setTopPlaylists(playlists.data.results);
 
-      // 3. Fetch Top Playlists
-      const playlistsRes = await fetch(`${API_BASE}/search/playlists?query=Hits&limit=15`);
-      const playlistsData = await playlistsRes.json();
-      if(playlistsData.success) setTopPlaylists(playlistsData.data.results);
-
-    } catch (e) { console.error("Home data failed", e); } 
+    } catch (e) { console.error("Home load error", e); } 
     finally { setLoading(false); }
   };
 
-  const toggleLike = (song) => {
+  const toggleLike = async (song) => {
     if (!user) return;
-    const isLiked = user.likedSongs.some(s => s.id === song.id);
-    let newLikes = isLiked ? user.likedSongs.filter(s => s.id !== song.id) : [...user.likedSongs, song];
-    const updatedUser = { ...user, likedSongs: newLikes };
-    setUser(updatedUser);
-    localStorage.setItem('musiq_user', JSON.stringify(updatedUser));
-    
-    // Sync DB
-    const dbUsers = JSON.parse(localStorage.getItem('musiq_users') || "[]");
-    const idx = dbUsers.findIndex(u => u.username === user.username);
-    if (idx !== -1) {
-      dbUsers[idx] = updatedUser;
-      localStorage.setItem('musiq_users', JSON.stringify(dbUsers));
-    }
+    const isLiked = likedSongs.some(s => s.id === song.id);
+    let newLikes = isLiked ? likedSongs.filter(s => s.id !== song.id) : [...likedSongs, song];
+    setLikedSongs(newLikes);
+
+    const ref = doc(db, "users", user.uid);
+    try {
+      if (isLiked) await updateDoc(ref, { likedSongs: arrayRemove(song) });
+      else await updateDoc(ref, { likedSongs: arrayUnion(song) });
+    } catch (e) { console.error(e); }
   };
 
   const doSearch = async () => {
-    if (!searchQuery) {
-        setSearchResults([]); // Clear search to show homepage
-        return;
-    }
+    if (!searchQuery) { setSearchResults([]); return; }
     setLoading(true); setTab('search_results');
     try {
       const res = await fetch(`${API_BASE}/search/songs?query=${encodeURIComponent(searchQuery)}`);
@@ -138,8 +136,39 @@ function App() {
   };
 
   // ==============================
-  // 3. PLAYER LOGIC
+  // 3. SMART PLAY LOGIC (Fixes the issue)
   // ==============================
+  
+  // Handles clicking any card (Song, Album, or Playlist)
+  const handleCardClick = async (item, type) => {
+    if (type === 'song') {
+      // It's a song, play directly
+      playSong([item], 0);
+    } else {
+      // It's an Album or Playlist -> Fetch songs inside it first
+      setLoading(true);
+      try {
+        let endpoint = type === 'album' 
+          ? `${API_BASE}/albums?id=${item.id}` 
+          : `${API_BASE}/playlists?id=${item.id}`;
+        
+        const res = await fetch(endpoint);
+        const data = await res.json();
+        
+        if (data.success && data.data.songs) {
+          // Play the first song of the album/playlist
+          playSong(data.data.songs, 0);
+        } else {
+          alert("No songs found in this selection.");
+        }
+      } catch (e) {
+        console.error("Error fetching container details", e);
+      } finally {
+        setLoading(false);
+      }
+    }
+  };
+
   const playSong = (list, idx) => {
     if (idx < 0 || idx >= list.length) return;
     if (list !== queue) setQueue(list);
@@ -147,31 +176,50 @@ function App() {
     const song = list[idx];
     setCurrentSong(song);
     
+    // SAFETY CHECK: Does downloadUrl exist?
+    if (!song.downloadUrl || song.downloadUrl.length === 0) {
+        alert("Audio not available for this song.");
+        return;
+    }
+
+    // Quality Selection with Fallback
     let match = song.downloadUrl.find(u => u.quality === quality);
-    let url = match ? match.url : song.downloadUrl[song.downloadUrl.length - 1].url;
+    // If quality match fails, pick the last one (usually highest), otherwise the first one
+    let url = match ? match.url : (song.downloadUrl[song.downloadUrl.length - 1]?.url || song.downloadUrl[0]?.url);
     
     if (audioRef.current.src !== url) {
       audioRef.current.src = url;
       audioRef.current.volume = volume;
-      audioRef.current.play().then(()=>setIsPlaying(true));
+      audioRef.current.play()
+        .then(() => setIsPlaying(true))
+        .catch(e => console.error("Playback error:", e));
     } else {
-      audioRef.current.play(); setIsPlaying(true);
+      audioRef.current.play();
+      setIsPlaying(true);
     }
   };
 
   const handleQualityChange = (newQ) => {
     setQuality(newQ);
-    if (currentSong) {
+    if (currentSong && currentSong.downloadUrl) {
         const t = audioRef.current.currentTime;
         const p = !audioRef.current.paused;
+        
         let match = currentSong.downloadUrl.find(u => u.quality === newQ);
         let url = match ? match.url : currentSong.downloadUrl[currentSong.downloadUrl.length - 1].url;
+        
         if (audioRef.current.src !== url) {
             audioRef.current.src = url;
             audioRef.current.currentTime = t;
             if (p) audioRef.current.play();
         }
     }
+  };
+
+  const handleVolumeChange = (e) => {
+    const vol = parseFloat(e.target.value);
+    setVolume(vol);
+    audioRef.current.volume = vol;
   };
 
   const togglePlay = () => {
@@ -189,7 +237,7 @@ function App() {
   }, [queue, qIndex]);
 
   const getImg = (i) => Array.isArray(i) ? i[i.length-1].url : i;
-  const isLiked = (id) => user?.likedSongs.some(s => s.id === id);
+  const isLiked = (id) => user && likedSongs.some(s => s.id === id);
 
   // ==============================
   // 4. VIEW
@@ -200,7 +248,7 @@ function App() {
       <div className="auth-container">
         <div className="auth-box">
           <h1 className="logo" style={{fontSize:'3rem', marginBottom:'20px'}}>Musiq.</h1>
-          <input placeholder="Username" value={authInput.username} onChange={e=>setAuthInput({...authInput,username:e.target.value})} className="auth-input"/>
+          <input placeholder="Email" type="email" value={authInput.email} onChange={e=>setAuthInput({...authInput,email:e.target.value})} className="auth-input"/>
           <input type="password" placeholder="Password" value={authInput.password} onChange={e=>setAuthInput({...authInput,password:e.target.value})} className="auth-input"/>
           <button className="auth-btn" onClick={handleAuth}>{authMode==='login'?'Sign In':'Sign Up'}</button>
           <p style={{color:'#666', marginTop:'15px', cursor:'pointer'}} onClick={()=>setAuthMode(authMode==='login'?'signup':'login')}>
@@ -237,18 +285,21 @@ function App() {
             />
           </div>
           <div className="user-pill" onClick={logout}>
-            <div className="avatar">{user.username[0].toUpperCase()}</div>
+            <div className="avatar">{user.email ? user.email[0].toUpperCase() : 'U'}</div>
             <span style={{fontSize:'0.9rem', color:'#aaa', marginLeft:'10px'}}>Logout</span>
           </div>
         </div>
 
         <div className="scroll-area">
+          {loading && <div style={{textAlign:'center', padding:'20px', color:'#555'}}>Loading...</div>}
+
+          {/* SEARCH RESULTS VIEW */}
           {tab === 'search_results' && (
              <>
                 <h2>Search Results</h2>
                 <div className="grid">
                     {searchResults.map((item) => (
-                      <div key={item.id} className="card" onClick={()=>playSong([item], 0)}>
+                      <div key={item.id} className="card" onClick={()=>handleCardClick(item, 'song')}>
                         <img src={getImg(item.image)} alt=""/>
                         <h3>{item.name}</h3>
                         <p>{item.primaryArtists}</p>
@@ -260,6 +311,7 @@ function App() {
              </>
           )}
 
+          {/* HOMEPAGE VIEW */}
           {tab === 'home' && (
             <>
               {/* Section 1: Trending Songs */}
@@ -269,8 +321,8 @@ function App() {
                     <div className="section-subtitle">Top hits of the week</div>
                 </div>
                 <div className="horizontal-scroll">
-                    {trendingSongs.map((item, idx) => (
-                      <div key={item.id} className="card" onClick={()=>playSong(trendingSongs, idx)}>
+                    {trendingSongs.map((item) => (
+                      <div key={item.id} className="card" onClick={()=>handleCardClick(item, 'song')}>
                         <img src={getImg(item.image)} alt=""/>
                         <h3>{item.name || item.title}</h3>
                         <p>{item.primaryArtists}</p>
@@ -288,7 +340,7 @@ function App() {
                 </div>
                 <div className="horizontal-scroll">
                     {newAlbums.map((item) => (
-                      <div key={item.id} className="card">
+                      <div key={item.id} className="card" onClick={()=>handleCardClick(item, 'album')}>
                         <img src={getImg(item.image)} alt=""/>
                         <h3>{item.name || item.title}</h3>
                         <p>{item.description || item.year}</p>
@@ -305,7 +357,7 @@ function App() {
                 </div>
                 <div className="horizontal-scroll">
                     {topPlaylists.map((item) => (
-                      <div key={item.id} className="card">
+                      <div key={item.id} className="card" onClick={()=>handleCardClick(item, 'playlist')}>
                         <img src={getImg(item.image)} alt=""/>
                         <h3>{item.title || item.name}</h3>
                         <p>{item.language} • {item.songCount || 'Mix'}</p>
@@ -316,6 +368,7 @@ function App() {
             </>
           )}
 
+          {/* LIBRARY VIEW */}
           {tab === 'library' && (
             <>
               <h2>Liked Songs</h2>
@@ -366,10 +419,7 @@ function App() {
                  <span style={{fontSize:'0.8rem', color:'#aaa'}}>🔊</span>
                  <input 
                     type="range" min="0" max="1" step="0.05" 
-                    value={volume} onChange={(e)=>{
-                        setVolume(e.target.value); 
-                        audioRef.current.volume = e.target.value;
-                    }}
+                    value={volume} onChange={handleVolumeChange}
                     className="volume-slider"
                  />
                  <select className="quality-select" value={quality} onChange={(e)=>handleQualityChange(e.target.value)}>
