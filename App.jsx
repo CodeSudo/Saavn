@@ -19,7 +19,8 @@ const Icons = {
   Shuffle: () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="16 3 21 3 21 8"/><line x1="4" y1="20" x2="21" y2="3"/><polyline points="21 16 21 21 16 21"/><line x1="15" y1="15" x2="21" y2="21"/><line x1="4" y1="4" x2="9" y2="9"/></svg>,
   Repeat: () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>,
   RepeatOne: () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/><text x="10" y="15" fontSize="8" fill="currentColor" style={{fontWeight:'bold'}}>1</text></svg>,
-  Radio: () => <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="2"/><path d="M16.24 7.76a6 6 0 0 1 0 8.49m-8.48-.01a6 6 0 0 1 0-8.49m11.31-2.82a10 10 0 0 1 0 14.14m-14.14 0a10 10 0 0 1 0-14.14"/></svg>
+  Radio: () => <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="2"/><path d="M16.24 7.76a6 6 0 0 1 0 8.49m-8.48-.01a6 6 0 0 1 0-8.49m11.31-2.82a10 10 0 0 1 0 14.14m-14.14 0a10 10 0 0 1 0-14.14"/></svg>,
+  Back: () => <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>
 };
 
 // FIREBASE
@@ -57,7 +58,6 @@ function App() {
   
   const [moodPlaylists, setMoodPlaylists] = useState([]);
 
-  // Added topArtists to state
   const [homeData, setHomeData] = useState({ 
     trending: [], charts: [], newAlbums: [], editorial: [], radio: [], topArtists: [], love: [], fresh: [], nineties: [], hindiPop: [] 
   });
@@ -122,8 +122,8 @@ function App() {
         fetch(`${API_BASE}/search/playlists?query=Top Charts&limit=15`).then(r=>r.json()).catch(()=>({})),
         fetch(`${API_BASE}/search/albums?query=New&limit=15`).then(r=>r.json()).catch(()=>({})),
         fetch(`${API_BASE}/search/playlists?query=Editors Pick&limit=15`).then(r=>r.json()).catch(()=>({})),
-        fetch(`${API_BASE}/search/artists?query=Best&limit=15`).then(r=>r.json()).catch(()=>({})), // Radio
-        fetch(`${API_BASE}/search/artists?query=Top Artists&limit=15`).then(r=>r.json()).catch(()=>({})), // NEW: Top Artists
+        fetch(`${API_BASE}/search/artists?query=Best&limit=15`).then(r=>r.json()).catch(()=>({})), 
+        fetch(`${API_BASE}/search/artists?query=Top Artists&limit=15`).then(r=>r.json()).catch(()=>({})),
         fetch(`${API_BASE}/search/playlists?query=Love&limit=15`).then(r=>r.json()).catch(()=>({})),
         fetch(`${API_BASE}/search/playlists?query=Fresh Hits&limit=15`).then(r=>r.json()).catch(()=>({})),
         fetch(`${API_BASE}/search/playlists?query=90s Bollywood&limit=15`).then(r=>r.json()).catch(()=>({})),
@@ -136,7 +136,7 @@ function App() {
         newAlbums: results[2]?.data?.results || [], 
         editorial: results[3]?.data?.results || [],
         radio: results[4]?.data?.results || [],
-        topArtists: results[5]?.data?.results || [], // Store new data
+        topArtists: results[5]?.data?.results || [], 
         love: results[6]?.data?.results || [],
         fresh: results[7]?.data?.results || [],
         nineties: results[8]?.data?.results || [],
@@ -363,7 +363,7 @@ function App() {
     }
   }, [currentSong, isPlaying, queue, qIndex]);
 
-  useEffect(() => { document.title = currentSong ? `${getName(currentSong)} • Void` : "Voic Music"; }, [currentSong]);
+  useEffect(() => { document.title = currentSong ? `${getName(currentSong)} • Aura` : "Aura Music"; }, [currentSong]);
 
   if(view==='loading') return <div style={{height:'100vh',background:'black',display:'flex',justifyContent:'center',alignItems:'center',color:'white'}}>Loading...</div>;
 
@@ -371,7 +371,7 @@ function App() {
     <div className="auth-container">
         <Toaster/>
         <div className="auth-box">
-            <h1 className="brand">Void</h1>
+            <h1 className="brand">Aura.</h1>
             <input className="auth-input" placeholder="Email" onChange={e=>setAuthInput({...authInput,email:e.target.value})}/>
             <input className="auth-input" type="password" placeholder="Password" onChange={e=>setAuthInput({...authInput,password:e.target.value})}/>
             <button className="auth-btn" onClick={handleAuth}>{authMode==='login'?'Sign In':'Sign Up'}</button>
@@ -444,7 +444,7 @@ function App() {
 
         {/* SIDEBAR */}
         <div className="sidebar">
-            <div className="brand">Void</div>
+            <div className="brand">Aura.</div>
             <div className="nav-links">
                 <div className={`nav-item ${tab==='home'?'active':''}`} onClick={()=>setTab('home')}><Icons.Home/> Home</div>
                 <div className={`nav-item ${tab==='library'?'active':''}`} onClick={()=>setTab('library')}><Icons.Library/> Liked Songs</div>
@@ -478,7 +478,9 @@ function App() {
                 {/* DETAILS */}
                 {tab === 'details' && selectedItem && (
                     <div className="details-view">
-                        <button className="btn-back" onClick={()=>setTab('home')}>← Back</button>
+                        <button className="btn-back" onClick={()=>setTab('home')}>
+                            <Icons.Back /> Back
+                        </button>
                         <div className="details-header">
                             <img className="details-art" src={getImg(selectedItem.image || selectedItem.songs?.[0]?.image)} alt=""/>
                             <div className="details-meta">
@@ -577,6 +579,9 @@ function App() {
                 {/* MOOD VIEW */}
                 {tab === 'mood' && selectedItem && (
                     <div className="section">
+                        <button className="btn-back" onClick={()=>setTab('home')} style={{marginBottom:30}}>
+                            <Icons.Back /> Home
+                        </button>
                         <div className="details-header" style={{background: selectedItem.color, borderRadius:'24px', padding:'40px', marginBottom:'40px'}}>
                             <h1 style={{fontSize:'3rem'}}>{selectedItem.name} Mix</h1>
                             <p>Curated Playlists for your mood</p>
@@ -803,7 +808,7 @@ function App() {
                                 {repeatMode==='one' ? <Icons.RepeatOne/> : <Icons.Repeat/>}
                             </button>
                         </div>
-                        {/* --- TIMELINE --- */}
+                        {/* TIMELINE */}
                         <div className="progress-container">
                             <span>{formatTime(progress)}</span>
                             <div className="progress-rail" onClick={handleSeek}>
