@@ -1,6 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
 import './App.css';
-// Import Firebase
 import { auth, db } from './firebase'; 
 import { 
   signInWithEmailAndPassword, 
@@ -15,27 +14,29 @@ import {
 const API_BASE = "https://saavn.sumit.co/api";
 
 function App() {
-  // UI State
+  // Navigation
   const [view, setView] = useState('auth'); 
   const [tab, setTab] = useState('home');   
   const [loading, setLoading] = useState(false);
 
-  // User State (Firebase)
+  // User
   const [user, setUser] = useState(null);
-  const [likedSongs, setLikedSongs] = useState([]); 
+  const [likedSongs, setLikedSongs] = useState([]);
   const [authMode, setAuthMode] = useState('login');
   const [authInput, setAuthInput] = useState({ email: '', password: '' });
 
-  // Data State
+  // Data
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState([]);
-  
-  // Homepage Data
   const [trendingSongs, setTrendingSongs] = useState([]);
   const [newAlbums, setNewAlbums] = useState([]);
   const [topPlaylists, setTopPlaylists] = useState([]);
 
-  // Player State
+  // Details Page State
+  const [selectedItem, setSelectedItem] = useState(null); // The album/playlist object
+  const [detailsSongs, setDetailsSongs] = useState([]);   // The songs inside it
+
+  // Player
   const audioRef = useRef(new Audio());
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentSong, setCurrentSong] = useState(null);
@@ -47,61 +48,7 @@ function App() {
   const [volume, setVolume] = useState(1);
 
   // ==============================
-  // 1. FIREBASE AUTH & INIT
-  // ==============================
-  useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
-      if (currentUser) {
-        // User Logged In
-        setUser(currentUser);
-        setView('app');
-        fetchHomepageData(); // Load music data
-        
-        // Load User Data from Firestore
-        try {
-          const docRef = doc(db, "users", currentUser.uid);
-          const docSnap = await getDoc(docRef);
-          if (docSnap.exists()) {
-            setLikedSongs(docSnap.data().likedSongs || []);
-          } else {
-            // New user setup
-            await setDoc(docRef, { email: currentUser.email, likedSongs: [] });
-          }
-        } catch (err) { console.error("DB Error:", err); }
-
-      } else {
-        // User Logged Out
-        setUser(null);
-        setLikedSongs([]);
-        setView('auth');
-        setCurrentSong(null);
-        setIsPlaying(false);
-        audioRef.current.pause();
-      }
-    });
-    return () => unsubscribe();
-  }, []);
-
-  const handleAuth = async () => {
-    if (!authInput.email || !authInput.password) return alert("Fill all fields");
-    setLoading(true);
-    try {
-      if (authMode === 'signup') {
-        const cred = await createUserWithEmailAndPassword(auth, authInput.email, authInput.password);
-        await setDoc(doc(db, "users", cred.user.uid), { email: authInput.email, likedSongs: [] });
-      } else {
-        await signInWithEmailAndPassword(auth, authInput.email, authInput.password);
-      }
-    } catch (e) { alert(e.message); } 
-    finally { setLoading(false); }
-  };
-
-  const logout = async () => {
-    await signOut(auth);
-  };
-
-  // ==============================
-  // 2. DATA LOGIC (API + Firestore)
+  // 1. DATA FETCHING
   // ==============================
   const fetchHomepageData = async () => {
     setLoading(true);
@@ -111,7 +58,6 @@ function App() {
         fetch(`${API_BASE}/search/albums?query=New&limit=15`).then(r => r.json()),
         fetch(`${API_BASE}/search/playlists?query=Hits&limit=15`).then(r => r.json())
       ]);
-
       if(songs.success) setTrendingSongs(songs.data.results);
       if(albums.success) setNewAlbums(albums.data.results);
       if(playlists.success) setTopPlaylists(playlists.data.results);
@@ -119,40 +65,60 @@ function App() {
     finally { setLoading(false); }
   };
 
-  const toggleLike = async (song) => {
-    if (!user) return;
-    
-    // Optimistic Update
-    const isLiked = likedSongs.some(s => s.id === song.id);
-    let newLikes = isLiked ? likedSongs.filter(s => s.id !== song.id) : [...likedSongs, song];
-    setLikedSongs(newLikes);
+  // ==============================
+  // 2. AUTHENTICATION
+  // ==============================
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
+      if (currentUser) {
+        setUser(currentUser);
+        setView('app');
+        fetchHomepageData();
+        try {
+          const docRef = doc(db, "users", currentUser.uid);
+          const docSnap = await getDoc(docRef);
+          if (docSnap.exists()) setLikedSongs(docSnap.data().likedSongs || []);
+          else await setDoc(docRef, { email: currentUser.email, likedSongs: [] });
+        } catch (err) { console.error(err); }
+      } else {
+        setUser(null); setLikedSongs([]); setView('auth');
+      }
+    });
+    return () => unsubscribe();
+  }, []);
 
-    // Cloud Update
-    const ref = doc(db, "users", user.uid);
+  const handleAuth = async () => {
+    if (!authInput.email || !authInput.password) return alert("Fill all fields");
     try {
-      if (isLiked) await updateDoc(ref, { likedSongs: arrayRemove(song) });
-      else await updateDoc(ref, { likedSongs: arrayUnion(song) });
-    } catch (e) { console.error(e); }
+      if (authMode === 'signup') {
+        const cred = await createUserWithEmailAndPassword(auth, authInput.email, authInput.password);
+        await setDoc(doc(db, "users", cred.user.uid), { email: authInput.email, likedSongs: [] });
+      } else {
+        await signInWithEmailAndPassword(auth, authInput.email, authInput.password);
+      }
+    } catch (e) { alert(e.message); }
   };
 
-  const doSearch = async () => {
-    if (!searchQuery) { setSearchResults([]); return; }
-    setLoading(true); setTab('search_results');
-    try {
-      const res = await fetch(`${API_BASE}/search/songs?query=${encodeURIComponent(searchQuery)}`);
-      const data = await res.json();
-      if (data.success) setSearchResults(data.data.results);
-    } catch (e) { console.error(e); } finally { setLoading(false); }
+  const logout = async () => {
+    await signOut(auth);
+    audioRef.current.pause(); setIsPlaying(false); setCurrentSong(null);
   };
 
   // ==============================
-  // 3. SMART PLAYER LOGIC
+  // 3. LOGIC (Details Page & Player)
   // ==============================
+  
+  // Handles clicking Cards
   const handleCardClick = async (item, type) => {
     if (type === 'song') {
       playSong([item], 0);
     } else {
+      // Open Details Page
+      setSelectedItem(item);
+      setTab('details');
       setLoading(true);
+      setDetailsSongs([]); // Clear previous
+
       try {
         let endpoint = type === 'album' 
           ? `${API_BASE}/albums?id=${item.id}` 
@@ -162,7 +128,7 @@ function App() {
         const data = await res.json();
         
         if (data.success && data.data.songs) {
-          playSong(data.data.songs, 0);
+          setDetailsSongs(data.data.songs);
         } else {
           alert("No songs found.");
         }
@@ -191,24 +157,46 @@ function App() {
     }
   };
 
+  const toggleLike = async (song) => {
+    if (!user) return;
+    const isLiked = likedSongs.some(s => s.id === song.id);
+    let newLikes = isLiked ? likedSongs.filter(s => s.id !== song.id) : [...likedSongs, song];
+    setLikedSongs(newLikes);
+    const ref = doc(db, "users", user.uid);
+    try {
+      if (isLiked) await updateDoc(ref, { likedSongs: arrayRemove(song) });
+      else await updateDoc(ref, { likedSongs: arrayUnion(song) });
+    } catch (e) { console.error(e); }
+  };
+
+  const doSearch = async () => {
+    if (!searchQuery) { setSearchResults([]); return; }
+    setLoading(true); setTab('search_results');
+    try {
+      const res = await fetch(`${API_BASE}/search/songs?query=${encodeURIComponent(searchQuery)}`);
+      const data = await res.json();
+      if (data.success) setSearchResults(data.data.results);
+    } catch (e) { console.error(e); } finally { setLoading(false); }
+  };
+
+  // Player Events
+  const togglePlay = () => {
+    if (audioRef.current.paused) { audioRef.current.play(); setIsPlaying(true); }
+    else { audioRef.current.pause(); setIsPlaying(false); }
+  };
+  
   const handleQualityChange = (newQ) => {
     setQuality(newQ);
     if (currentSong && currentSong.downloadUrl) {
         const t = audioRef.current.currentTime;
-        const p = !audioRef.current.paused;
         let match = currentSong.downloadUrl.find(u => u.quality === newQ);
         let url = match ? match.url : currentSong.downloadUrl[currentSong.downloadUrl.length - 1].url;
         if (audioRef.current.src !== url) {
             audioRef.current.src = url;
             audioRef.current.currentTime = t;
-            if (p) audioRef.current.play();
+            if (isPlaying) audioRef.current.play();
         }
     }
-  };
-
-  const togglePlay = () => {
-    if (audioRef.current.paused) { audioRef.current.play(); setIsPlaying(true); }
-    else { audioRef.current.pause(); setIsPlaying(false); }
   };
 
   useEffect(() => {
@@ -221,10 +209,10 @@ function App() {
   }, [queue, qIndex]);
 
   const getImg = (i) => Array.isArray(i) ? i[i.length-1].url : i;
-  const isLiked = (id) => user && likedSongs.some(s => s.id === id);
+  const isLiked = (id) => user?.likedSongs.some(s => s.id === id);
 
   // ==============================
-  // 4. VIEW RENDER
+  // 4. RENDER
   // ==============================
 
   if (view === 'auth') {
@@ -234,9 +222,7 @@ function App() {
           <h1 className="logo" style={{fontSize:'3rem', marginBottom:'20px'}}>Musiq.</h1>
           <input placeholder="Email" type="email" value={authInput.email} onChange={e=>setAuthInput({...authInput,email:e.target.value})} className="auth-input"/>
           <input type="password" placeholder="Password" value={authInput.password} onChange={e=>setAuthInput({...authInput,password:e.target.value})} className="auth-input"/>
-          {loading ? <div className="loader"></div> : (
-             <button className="auth-btn" onClick={handleAuth}>{authMode==='login'?'Sign In':'Sign Up'}</button>
-          )}
+          <button className="auth-btn" onClick={handleAuth}>{authMode==='login'?'Sign In':'Sign Up'}</button>
           <p style={{color:'#666', marginTop:'15px', cursor:'pointer'}} onClick={()=>setAuthMode(authMode==='login'?'signup':'login')}>
             {authMode==='login'?'Create Account':'Have Account?'}
           </p>
@@ -279,6 +265,37 @@ function App() {
         <div className="scroll-area">
           {loading && <div style={{textAlign:'center', padding:'20px', color:'#555'}}>Loading...</div>}
 
+          {/* DETAILS PAGE (New Page) */}
+          {tab === 'details' && selectedItem && (
+             <div className="details-view">
+               <button className="btn-back" onClick={() => setTab('home')}>← Back</button>
+               <div className="details-header">
+                  <img src={getImg(selectedItem.image)} alt="" className="details-img"/>
+                  <div className="details-info">
+                     <h1>{selectedItem.name || selectedItem.title}</h1>
+                     <p>{selectedItem.description || selectedItem.primaryArtists || `${detailsSongs.length} Songs`}</p>
+                     <div className="action-buttons">
+                        <button className="btn-play-all" onClick={() => playSong(detailsSongs, 0)}>▶ Play All</button>
+                     </div>
+                  </div>
+               </div>
+               
+               <div className="details-songs">
+                  {detailsSongs.map((song, idx) => (
+                     <div key={song.id} className="song-row" onClick={() => playSong(detailsSongs, idx)}>
+                        <span className="song-num">{idx + 1}</span>
+                        <img src={getImg(song.image)} alt="" />
+                        <div className="song-meta">
+                           <h4>{song.name}</h4>
+                           <p>{song.primaryArtists}</p>
+                        </div>
+                        <span className="song-dur">{Math.floor(song.duration/60)}:{String(song.duration%60).padStart(2, '0')}</span>
+                     </div>
+                  ))}
+               </div>
+             </div>
+          )}
+
           {/* SEARCH RESULTS */}
           {tab === 'search_results' && (
              <>
@@ -293,7 +310,6 @@ function App() {
                       </div>
                     ))}
                 </div>
-                {searchResults.length === 0 && !loading && <p style={{color:'#666'}}>No results found.</p>}
              </>
           )}
 
@@ -304,32 +320,30 @@ function App() {
               <div className="section">
                 <div className="section-header">
                     <div className="section-title">Trending Now</div>
-                    <div className="section-subtitle">Top hits of the week</div>
                 </div>
                 <div className="horizontal-scroll">
-                    {trendingSongs.length > 0 ? trendingSongs.map((item) => (
+                    {trendingSongs.map((item) => (
                       <div key={item.id} className="card" onClick={()=>handleCardClick(item, 'song')}>
                         <img src={getImg(item.image)} alt=""/>
                         <h3>{item.name || item.title}</h3>
                         <p>{item.primaryArtists}</p>
                         <div className={`card-heart ${isLiked(item.id)?'liked':''}`} onClick={(e)=>{e.stopPropagation(); toggleLike(item)}}>♥</div>
                       </div>
-                    )) : <p style={{color:'#666', padding:'10px'}}>Loading...</p>}
+                    ))}
                 </div>
               </div>
 
               {/* Section 2: Albums */}
               <div className="section">
                 <div className="section-header">
-                    <div className="section-title">New Releases</div>
-                    <div className="section-subtitle">Fresh albums for you</div>
+                    <div className="section-title">New Albums</div>
                 </div>
                 <div className="horizontal-scroll">
                     {newAlbums.map((item) => (
                       <div key={item.id} className="card" onClick={()=>handleCardClick(item, 'album')}>
                         <img src={getImg(item.image)} alt=""/>
                         <h3>{item.name || item.title}</h3>
-                        <p>{item.description || item.year}</p>
+                        <p>{item.year}</p>
                       </div>
                     ))}
                 </div>
@@ -339,14 +353,13 @@ function App() {
               <div className="section">
                 <div className="section-header">
                     <div className="section-title">Top Playlists</div>
-                    <div className="section-subtitle">Curated for every mood</div>
                 </div>
                 <div className="horizontal-scroll">
                     {topPlaylists.map((item) => (
                       <div key={item.id} className="card" onClick={()=>handleCardClick(item, 'playlist')}>
                         <img src={getImg(item.image)} alt=""/>
                         <h3>{item.title || item.name}</h3>
-                        <p>{item.language} • {item.songCount || 'Mix'}</p>
+                        <p>{item.language}</p>
                       </div>
                     ))}
                 </div>
