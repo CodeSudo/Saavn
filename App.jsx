@@ -39,30 +39,26 @@ const MOODS = [
 ];
 
 function App() {
-  // --- UI STATE ---
-  const [view, setView] = useState('loading'); 
-  const [tab, setTab] = useState('home');   
+  const [view, setView] = useState('loading');
+  const [tab, setTab] = useState('home');
   const [loading, setLoading] = useState(false);
-
-  // --- USER STATE ---
   const [user, setUser] = useState(null);
+  
+  // Data
   const [likedSongs, setLikedSongs] = useState([]);
-  const [userPlaylists, setUserPlaylists] = useState([]); 
-  const [authMode, setAuthMode] = useState('login');
-  const [authInput, setAuthInput] = useState({ email: '', password: '' });
-
-  // --- DATA STATE ---
+  const [userPlaylists, setUserPlaylists] = useState([]);
+  const [history, setHistory] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
+  
   const [resSongs, setResSongs] = useState([]);
   const [resAlbums, setResAlbums] = useState([]);
   const [resArtists, setResArtists] = useState([]);
   const [resPlaylists, setResPlaylists] = useState([]);
-  
   const [homeData, setHomeData] = useState({ 
     trending: [], charts: [], newAlbums: [], editorial: [], radio: [], love: [], fresh: [], nineties: [], hindiPop: [] 
   });
   
-  // --- DETAILS & MODALS ---
+  // Details & Modals
   const [selectedItem, setSelectedItem] = useState(null);
   const [detailsSongs, setDetailsSongs] = useState([]);
   const [showLyrics, setShowLyrics] = useState(false);
@@ -72,8 +68,12 @@ function App() {
   const [showAddToPlaylistModal, setShowAddToPlaylistModal] = useState(false);
   const [songToAdd, setSongToAdd] = useState(null);
   const [newPlaylistName, setNewPlaylistName] = useState("");
+  
+  // Auth
+  const [authMode, setAuthMode] = useState('login');
+  const [authInput, setAuthInput] = useState({ email: '', password: '' });
 
-  // --- PLAYER STATE ---
+  // Player
   const audioRef = useRef(new Audio());
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentSong, setCurrentSong] = useState(null);
@@ -86,13 +86,33 @@ function App() {
   const [isShuffle, setIsShuffle] = useState(false);
   const [repeatMode, setRepeatMode] = useState('none'); 
 
-  // --- HELPERS ---
+  // Helpers
   const getImg = (i) => { if(Array.isArray(i)) return i[i.length-1]?.url || i[0]?.url; return i || "https://via.placeholder.com/150"; }
   const getName = (i) => i?.name || i?.title || "Unknown";
   const getDesc = (i) => i?.primaryArtists || i?.description || i?.year || "";
   const isLiked = (id) => likedSongs.some(s => String(s.id) === String(id));
+  
+  // NEW HELPER: Format Time (00:00)
+  const formatTime = (s) => {
+    if(isNaN(s)) return "0:00";
+    const min = Math.floor(s / 60);
+    const sec = Math.floor(s % 60);
+    return `${min}:${sec < 10 ? '0'+sec : sec}`;
+  };
 
-  // --- 1. DATA FETCHING ---
+  // --- HISTORY LOGIC ---
+  const addToHistory = (song) => {
+    const prev = JSON.parse(localStorage.getItem('Void_history') || '[]');
+    const newHist = [song, ...prev.filter(s => String(s.id) !== String(song.id))].slice(0, 15);
+    localStorage.setItem('Void_history', JSON.stringify(newHist));
+    setHistory(newHist);
+  };
+
+  useEffect(() => {
+    setHistory(JSON.parse(localStorage.getItem('Void_history') || '[]'));
+  }, []);
+
+  // --- DATA FETCHING ---
   const fetchHome = async () => {
     setLoading(true);
     try {
@@ -154,13 +174,14 @@ function App() {
     } catch(e) { toast.error("Error loading lyrics", { id: toastId }); }
   };
 
-  // --- 2. PLAYER LOGIC ---
+  // --- PLAYER LOGIC ---
   const playSong = (list, idx) => {
     if(!list || idx < 0 || !list[idx]) return;
     if(list !== queue) setQueue(list);
     setQIndex(idx);
     const s = list[idx];
     setCurrentSong(s);
+    addToHistory(s);
     
     const url = s.downloadUrl?.find(u=>u.quality===quality)?.url || s.downloadUrl?.[0]?.url;
     if(url) {
@@ -176,6 +197,14 @@ function App() {
   const togglePlay = () => {
     if(audioRef.current.paused) { audioRef.current.play(); setIsPlaying(true); }
     else { audioRef.current.pause(); setIsPlaying(false); }
+  };
+
+  const handleSeek = (e) => {
+    const w = e.currentTarget.clientWidth;
+    const x = e.nativeEvent.offsetX;
+    const seekTo = (x / w) * duration;
+    audioRef.current.currentTime = seekTo;
+    setProgress(seekTo);
   };
 
   const toggleRepeat = () => {
@@ -198,7 +227,7 @@ function App() {
     }
   };
 
-  // --- 3. PLAYLISTS & LIKES ---
+  // --- PLAYLIST & LIKE ---
   const toggleLike = async (item) => {
     if(!user) return toast.error("Please Login");
     const liked = isLiked(item.id);
@@ -237,51 +266,31 @@ function App() {
     } catch(e) { toast.error("Failed"); }
   };
 
-  // --- 4. DETAILS VIEW & NAVIGATION ---
+  // --- NAVIGATION ---
   const handleCardClick = async (item, type) => {
-    if (type === 'song') { 
-      playSong([item], 0); 
-    } 
-    else if (type === 'playlist_custom') { 
-      setSelectedItem(item); setTab('details'); setDetailsSongs(item.songs || []); 
-    } 
+    if (type === 'song') { playSong([item], 0); }
+    else if (type === 'playlist_custom') { setSelectedItem(item); setTab('details'); setDetailsSongs(item.songs || []); }
     else if (type === 'mood') {
-        // FIXED MOOD LOGIC: Specific Fetch, No Global Search text
-        setLoading(true);
-        setTab('search');
-        // Clear previous generic results to hide irrelevant sections
-        setResAlbums([]);
-        setResArtists([]);
-        
+        setLoading(true); setTab('search'); setResAlbums([]); setResArtists([]);
         try {
             const [p, s] = await Promise.all([
                 fetch(`${API_BASE}/search/playlists?query=${encodeURIComponent(item.query)}`).then(r=>r.json()),
                 fetch(`${API_BASE}/search/songs?query=${encodeURIComponent(item.query)}`).then(r=>r.json())
             ]);
-            setResPlaylists(p?.data?.results || []);
-            setResSongs(s?.data?.results || []);
-        } catch(e) { console.error(e); } 
-        finally { setLoading(false); }
+            setResPlaylists(p?.data?.results || []); setResSongs(s?.data?.results || []);
+        } catch(e) { console.error(e); } finally { setLoading(false); }
     }
     else {
-      // Handles Albums, Playlists, Artists
       setSelectedItem(item); setTab('details'); setLoading(true); setDetailsSongs([]);
       try {
-        let endpoint = '';
-        if(type === 'album') endpoint = `${API_BASE}/albums?id=${item.id}`;
-        else if(type === 'playlist') endpoint = `${API_BASE}/playlists?id=${item.id}`;
-        else if(type === 'artist') endpoint = `${API_BASE}/artists?id=${item.id}`;
-        
+        let endpoint = type === 'album' ? `${API_BASE}/albums?id=${item.id}` : type === 'artist' ? `${API_BASE}/artists?id=${item.id}` : `${API_BASE}/playlists?id=${item.id}`;
         const res = await fetch(endpoint).then(r=>r.json());
-        if(res.success) {
-            const songs = res.data.songs || res.data.topSongs || [];
-            setDetailsSongs(songs);
-        }
+        if(res.success) setDetailsSongs(res.data.songs || res.data.topSongs || []);
       } catch(e) { console.error(e); } finally { setLoading(false); }
     }
   };
 
-  // --- 5. AUTH & LIFECYCLE ---
+  // --- AUTH & EFFECTS ---
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (u) => {
         if(u) {
@@ -338,7 +347,6 @@ function App() {
     document.title = currentSong ? `${getName(currentSong)} • Void` : "Void Web Player";
   }, [currentSong]);
 
-  // --- RENDER ---
   if(view==='loading') return <div style={{height:'100vh',background:'black',display:'flex',justifyContent:'center',alignItems:'center'}}>Loading...</div>;
 
   if(view==='auth') return (
@@ -358,7 +366,6 @@ function App() {
     <div className="app-layout">
         <Toaster position="top-center" toastOptions={{style:{background:'#333', color:'#fff'}}}/>
 
-        {/* --- OVERLAYS --- */}
         {showLyrics && (
             <div className="lyrics-overlay">
                 <button className="lyrics-close" onClick={()=>setShowLyrics(false)}>✕</button>
@@ -417,7 +424,7 @@ function App() {
             </div>
         )}
 
-        {/* --- SIDEBAR --- */}
+        {/* SIDEBAR */}
         <div className="sidebar">
             <div className="brand">Void.</div>
             <div className="nav-links">
@@ -436,7 +443,7 @@ function App() {
             </div>
         </div>
 
-        {/* --- MAIN CONTENT --- */}
+        {/* MAIN CONTENT */}
         <div className="main-content">
             <div className="header">
                 <div className="search-box">
@@ -505,47 +512,17 @@ function App() {
                                 </div>
                             </>
                         )}
-                        {resPlaylists.length > 0 && (
-                            <>
-                                <div className="section-header" style={{marginTop:40}}>Playlists</div>
-                                <div className="horizontal-scroll">
-                                    {resPlaylists.map(p => (
-                                        <div key={p.id} className="card" onClick={()=>handleCardClick(p, 'playlist')}>
-                                            <img src={getImg(p.image)} alt=""/>
-                                            <h3>{getName(p)}</h3>
-                                            <p>{p.language}</p>
-                                        </div>
-                                    ))}
+                        {/* More Sections... */}
+                        {resPlaylists.length > 0 && <div className="section-header" style={{marginTop:40}}>Playlists</div>}
+                        <div className="horizontal-scroll">
+                            {resPlaylists.map(p => (
+                                <div key={p.id} className="card" onClick={()=>handleCardClick(p, 'playlist')}>
+                                    <img src={getImg(p.image)} alt=""/>
+                                    <h3>{getName(p)}</h3>
+                                    <p>{p.language}</p>
                                 </div>
-                            </>
-                        )}
-                        {resAlbums.length > 0 && (
-                            <>
-                                <div className="section-header" style={{marginTop:40}}>Albums</div>
-                                <div className="horizontal-scroll">
-                                    {resAlbums.map(a => (
-                                        <div key={a.id} className="card" onClick={()=>handleCardClick(a, 'album')}>
-                                            <img src={getImg(a.image)} alt=""/>
-                                            <h3>{getName(a)}</h3>
-                                            <p>{a.year}</p>
-                                        </div>
-                                    ))}
-                                </div>
-                            </>
-                        )}
-                        {resArtists.length > 0 && (
-                            <>
-                                <div className="section-header" style={{marginTop:40}}>Artists</div>
-                                <div className="horizontal-scroll">
-                                    {resArtists.map(a => (
-                                        <div key={a.id} className="card" onClick={()=>handleCardClick(a, 'artist')}>
-                                            <img src={getImg(a.image)} alt="" style={{borderRadius:'50%'}}/>
-                                            <h3 style={{textAlign:'center'}}>{getName(a)}</h3>
-                                        </div>
-                                    ))}
-                                </div>
-                            </>
-                        )}
+                            ))}
+                        </div>
                     </div>
                 )}
 
@@ -557,9 +534,22 @@ function App() {
                             <p>Discover new music, fresh albums, and curated playlists.</p>
                         </div>
 
-                        {/* Top Genres & Moods */}
+                        {history.length > 0 && (
+                            <div className="section">
+                                <div className="section-header">Recently Played</div>
+                                <div className="horizontal-scroll">
+                                    {history.map(s => (
+                                        <div key={s.id} className="card" onClick={()=>playSong(history, history.indexOf(s))}>
+                                            <img src={getImg(s.image)} alt=""/>
+                                            <h3>{getName(s)}</h3>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+
                         <div className="section">
-                            <div className="section-header">Top Genres & Moods</div>
+                            <div className="section-header">Moods</div>
                             <div className="horizontal-scroll">
                                 {MOODS.map(m => (
                                     <div key={m.id} className="card" style={{minWidth:'160px', background:m.color, display:'flex', alignItems:'center', justifyContent:'center'}} onClick={()=>handleCardClick(m, 'mood')}>
@@ -570,7 +560,7 @@ function App() {
                         </div>
 
                         <div className="section">
-                            <div className="section-header">Trending Songs</div>
+                            <div className="section-header">Trending</div>
                             <div className="horizontal-scroll">
                                 {homeData.trending.map(s => (
                                     <div key={s.id} className="card" onClick={()=>handleCardClick(s, 'song')}>
@@ -594,97 +584,6 @@ function App() {
                                         <img src={getImg(p.image)} alt=""/>
                                         <h3>{getName(p)}</h3>
                                         <p>{p.language}</p>
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
-
-                        <div className="section">
-                            <div className="section-header">New Albums</div>
-                            <div className="horizontal-scroll">
-                                {homeData.newAlbums.map(a => (
-                                    <div key={a.id} className="card" onClick={()=>handleCardClick(a, 'album')}>
-                                        <img src={getImg(a.image)} alt=""/>
-                                        <h3>{getName(a)}</h3>
-                                        <p>{a.year}</p>
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
-
-                        <div className="section">
-                            <div className="section-header">Radio Stations</div>
-                            <div className="horizontal-scroll">
-                                {homeData.radio.map(a => (
-                                    <div key={a.id} className="card" onClick={()=>handleCardClick(a, 'artist')}>
-                                        <img src={getImg(a.image)} alt="" style={{borderRadius:'50%'}}/>
-                                        <h3 style={{textAlign:'center'}}>{getName(a)}</h3>
-                                        <p style={{textAlign:'center'}}>Artist Radio</p>
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
-
-                        <div className="section">
-                            <div className="section-header">Month of Love</div>
-                            <div className="horizontal-scroll">
-                                {homeData.love.map(p => (
-                                    <div key={p.id} className="card" onClick={()=>handleCardClick(p, 'playlist')}>
-                                        <img src={getImg(p.image)} alt=""/>
-                                        <h3>{getName(p)}</h3>
-                                        <p>Romance</p>
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
-
-                        <div className="section">
-                            <div className="section-header">Editorial Picks</div>
-                            <div className="horizontal-scroll">
-                                {homeData.editorial.map(p => (
-                                    <div key={p.id} className="card" onClick={()=>handleCardClick(p, 'playlist')}>
-                                        <img src={getImg(p.image)} alt=""/>
-                                        <h3>{getName(p)}</h3>
-                                        <p>Featured</p>
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
-
-                        <div className="section">
-                            <div className="section-header">Fresh Hits</div>
-                            <div className="horizontal-scroll">
-                                {homeData.fresh.map(p => (
-                                    <div key={p.id} className="card" onClick={()=>handleCardClick(p, 'playlist')}>
-                                        <img src={getImg(p.image)} alt=""/>
-                                        <h3>{getName(p)}</h3>
-                                        <p>New Music</p>
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
-
-                        <div className="section">
-                            <div className="section-header">Best of 90s</div>
-                            <div className="horizontal-scroll">
-                                {homeData.nineties.map(p => (
-                                    <div key={p.id} className="card" onClick={()=>handleCardClick(p, 'playlist')}>
-                                        <img src={getImg(p.image)} alt=""/>
-                                        <h3>{getName(p)}</h3>
-                                        <p>Nostalgia</p>
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
-
-                        <div className="section">
-                            <div className="section-header">New Releases Pop - Hindi</div>
-                            <div className="horizontal-scroll">
-                                {homeData.hindiPop.map(a => (
-                                    <div key={a.id} className="card" onClick={()=>handleCardClick(a, 'album')}>
-                                        <img src={getImg(a.image)} alt=""/>
-                                        <h3>{getName(a)}</h3>
-                                        <p>{a.year}</p>
                                     </div>
                                 ))}
                             </div>
@@ -719,10 +618,11 @@ function App() {
                 <>
                     <div className="p-track">
                         <img src={getImg(currentSong.image)} alt=""/>
-                        <div className="p-info">
-                            <h4>{getName(currentSong)}</h4>
-                            <p>{getDesc(currentSong)}</p>
+                        <div style={{overflow: 'hidden'}}>
+                            <h4 style={{fontSize:'0.9rem', color:'white', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis'}}>{getName(currentSong)}</h4>
+                            <p style={{fontSize:'0.8rem', color:'#aaa', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis'}}>{getDesc(currentSong)}</p>
                         </div>
+                        {isPlaying && <div className="visualizer"><div className="bar"/><div className="bar"/><div className="bar"/><div className="bar"/></div>}
                     </div>
                     <div className="p-center">
                         <div className="p-controls">
@@ -733,6 +633,14 @@ function App() {
                             <button className={`btn-icon ${repeatMode!=='none'?'active':''}`} onClick={toggleRepeat}>
                                 {repeatMode==='one' ? <Icons.RepeatOne/> : <Icons.Repeat/>}
                             </button>
+                        </div>
+                        {/* --- TIMELINE --- */}
+                        <div className="progress-container">
+                            <span>{formatTime(progress)}</span>
+                            <div className="progress-rail" onClick={handleSeek}>
+                                <div className="progress-fill" style={{width: `${(progress/duration)*100}%`}}></div>
+                            </div>
+                            <span>{formatTime(duration)}</span>
                         </div>
                     </div>
                     <div className="p-right">
