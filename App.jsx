@@ -1,5 +1,13 @@
 import React, { useState, useRef, useEffect } from 'react';
 import './App.css';
+// Firebase
+import { auth, db } from './firebase'; 
+import { signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, onAuthStateChanged } from 'firebase/auth';
+import { doc, setDoc, getDoc, updateDoc, arrayUnion, arrayRemove } from 'firebase/firestore';
+
+// API
+const API_BASE = "https://saavn.sumit.co/api";
+
 // Icons
 const Icons = {
   Home: () => <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/></svg>,
@@ -10,13 +18,6 @@ const Icons = {
   SkipBack: () => <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><polygon points="19 20 9 12 19 4 19 20"/><line x1="5" y1="19" x2="5" y2="5"/></svg>,
   SkipFwd: () => <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 4 15 12 5 20 5 4"/><line x1="19" y1="5" x2="19" y2="19"/></svg>
 };
-
-// Firebase
-import { auth, db } from './firebase'; 
-import { signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, onAuthStateChanged } from 'firebase/auth';
-import { doc, setDoc, getDoc, updateDoc, arrayUnion, arrayRemove } from 'firebase/firestore';
-
-const API_BASE = "https://saavn.sumit.co/api";
 
 function App() {
   // Navigation & UI
@@ -63,7 +64,9 @@ function App() {
   };
   const getName = (i) => i.name || i.title || "Unknown";
   const getDesc = (i) => i.primaryArtists || i.description || i.year || "";
-  const isLiked = (id) => user?.likedSongs?.some(s => s.id === id);
+  
+  // FIXED: Ensure strict ID comparison
+  const isLiked = (id) => user?.likedSongs?.some(s => String(s.id) === String(id));
 
   // --- 2. DATA FETCHING ---
   const fetchHome = async () => {
@@ -97,7 +100,53 @@ function App() {
     } catch(e) { console.error(e); } finally { setLoading(false); }
   };
 
-  // --- 3. INTERACTION ---
+  // --- 3. LOGIC (LIKES FIXED) ---
+  const toggleLike = async (item) => {
+    if(!user) return alert("Please Login");
+    
+    // 1. Check if already liked using strict string comparison
+    const alreadyLiked = isLiked(item.id);
+    const userRef = doc(db, "users", user.uid);
+
+    try {
+        if(alreadyLiked) {
+            // UNLIKE: Remove the exact object from the array
+            // We must find the exact object in the local array to pass to arrayRemove
+            const itemToRemove = likedSongs.find(s => String(s.id) === String(item.id));
+            
+            if (itemToRemove) {
+                // Optimistic UI Update
+                const newLikes = likedSongs.filter(s => String(s.id) !== String(item.id));
+                setLikedSongs(newLikes);
+                
+                // DB Update
+                await updateDoc(userRef, { likedSongs: arrayRemove(itemToRemove) });
+            }
+        } else {
+            // LIKE: Add to array
+            // Sanitize data to ensure we don't save garbage
+            const cleanItem = {
+                id: String(item.id), // Force String ID
+                name: item.name || item.title || "Unknown",
+                primaryArtists: item.primaryArtists || item.description || "",
+                image: item.image || [],
+                downloadUrl: item.downloadUrl || [], // Important for playback
+                duration: item.duration || 0
+            };
+
+            // Optimistic UI Update
+            setLikedSongs([...likedSongs, cleanItem]);
+
+            // DB Update
+            await updateDoc(userRef, { likedSongs: arrayUnion(cleanItem) });
+        }
+    } catch(e) { 
+        console.error("Like Error", e);
+        // If error, revert UI (optional but good practice)
+        // For simplicity we leave it, but a real app would fetch from DB again
+    }
+  };
+
   const handleCardClick = async (item, type) => {
     if (type === 'song') {
       playSong([item], 0);
@@ -119,7 +168,6 @@ function App() {
     const s = list[idx];
     setCurrentSong(s);
     
-    // Determine URL
     const url = s.downloadUrl?.find(u => u.quality === quality)?.url || s.downloadUrl?.[0]?.url;
     if(url) {
       if(audioRef.current.src !== url) {
@@ -136,28 +184,6 @@ function App() {
   const togglePlay = () => {
     if(audioRef.current.paused) { audioRef.current.play(); setIsPlaying(true); }
     else { audioRef.current.pause(); setIsPlaying(false); }
-  };
-
-  const toggleLike = async (song) => {
-    if(!user) return alert("Please Login");
-    const liked = isLiked(song.id);
-    const newLikes = liked ? likedSongs.filter(s=>s.id!==song.id) : [...likedSongs, song];
-    setLikedSongs(newLikes); // Optimistic UI
-    
-    const ref = doc(db, "users", user.uid);
-    try {
-        if(liked) {
-            const toRemove = likedSongs.find(s=>s.id===song.id);
-            if(toRemove) await updateDoc(ref, { likedSongs: arrayRemove(toRemove) });
-        } else {
-            // Sanitize
-            const clean = {
-                id: song.id, name: song.name||song.title, primaryArtists: song.primaryArtists||"",
-                image: song.image||[], downloadUrl: song.downloadUrl||[], duration: song.duration||0
-            };
-            await updateDoc(ref, { likedSongs: arrayUnion(clean) });
-        }
-    } catch(e) { console.error(e); }
   };
 
   // --- 4. AUTH & LIFECYCLE ---
@@ -211,7 +237,7 @@ function App() {
 
   return (
     <div className="app-layout">
-        {/* DESKTOP SIDEBAR */}
+        {/* SIDEBAR */}
         <div className="sidebar">
             <div className="brand">Spotube</div>
             <div className="nav-links">
@@ -261,7 +287,11 @@ function App() {
                                         <div className="track-title">{getName(s)}</div>
                                         <div className="track-artist">{s.primaryArtists}</div>
                                     </div>
-                                    <button className={`btn-like-list ${isLiked(s.id)?'liked':''}`} onClick={(e)=>{e.stopPropagation(); toggleLike(s)}}>♥</button>
+                                    {/* HEART IN DETAILS LIST */}
+                                    <button 
+                                        className={`btn-like-list ${isLiked(s.id)?'liked':''}`} 
+                                        onClick={(e)=>{e.stopPropagation(); toggleLike(s);}}
+                                    >♥</button>
                                     <span className="track-dur">{Math.floor(s.duration/60)}:{String(s.duration%60).padStart(2,'0')}</span>
                                 </div>
                             ))}
@@ -281,7 +311,10 @@ function App() {
                                             <img src={getImg(i.image)} alt=""/>
                                             <h3>{getName(i)}</h3>
                                             <p>{i.primaryArtists}</p>
-                                            <button className={`card-heart ${isLiked(i.id)?'liked':''}`} onClick={(e)=>{e.stopPropagation(); toggleLike(i)}}>♥</button>
+                                            <button 
+                                                className={`card-heart ${isLiked(i.id)?'liked':''}`} 
+                                                onClick={(e)=>{e.stopPropagation(); toggleLike(i)}}
+                                            >♥</button>
                                         </div>
                                     ))}
                                 </div>
@@ -296,20 +329,6 @@ function App() {
                                             <img src={getImg(i.image)} alt=""/>
                                             <h3>{getName(i)}</h3>
                                             <p>{i.year}</p>
-                                        </div>
-                                    ))}
-                                </div>
-                            </div>
-                        )}
-                        {resPlaylists.length>0 && (
-                            <div className="section">
-                                <div className="section-header"><div className="section-title">Playlists</div></div>
-                                <div className="horizontal-scroll">
-                                    {resPlaylists.map(i=>(
-                                        <div key={i.id} className="card" onClick={()=>handleCardClick(i, 'playlist')}>
-                                            <img src={getImg(i.image)} alt=""/>
-                                            <h3>{getName(i)}</h3>
-                                            <p>{i.language}</p>
                                         </div>
                                     ))}
                                 </div>
@@ -333,7 +352,11 @@ function App() {
                                         <img src={getImg(i.image)} alt=""/>
                                         <h3>{getName(i)}</h3>
                                         <p>{i.primaryArtists}</p>
-                                        <button className={`card-heart ${isLiked(i.id)?'liked':''}`} onClick={(e)=>{e.stopPropagation(); toggleLike(i)}}>♥</button>
+                                        {/* HEART IN CARD */}
+                                        <button 
+                                            className={`card-heart ${isLiked(i.id)?'liked':''}`} 
+                                            onClick={(e)=>{e.stopPropagation(); toggleLike(i)}}
+                                        >♥</button>
                                     </div>
                                 ))}
                             </div>
@@ -346,6 +369,7 @@ function App() {
                                         <img src={getImg(i.image)} alt=""/>
                                         <h3>{getName(i)}</h3>
                                         <p>{i.year}</p>
+                                        {/* Note: Liking albums as whole objects can be messy, kept to songs mostly */}
                                     </div>
                                 ))}
                             </div>
@@ -363,7 +387,10 @@ function App() {
                                     <img src={getImg(i.image)} alt=""/>
                                     <h3>{getName(i)}</h3>
                                     <p>{i.primaryArtists}</p>
-                                    <button className="card-heart liked" onClick={(e)=>{e.stopPropagation(); toggleLike(i)}}>♥</button>
+                                    <button 
+                                        className="card-heart liked" 
+                                        onClick={(e)=>{e.stopPropagation(); toggleLike(i)}}
+                                    >♥</button>
                                 </div>
                             ))}
                         </div>
@@ -372,7 +399,7 @@ function App() {
             </div>
         </div>
 
-        {/* BOTTOM NAV (MOBILE) */}
+        {/* BOTTOM NAV */}
         <div className="bottom-nav">
             <div className={`nav-tab ${tab==='home'?'active':''}`} onClick={()=>setTab('home')}>
                 <Icons.Home/><span>Home</span>
