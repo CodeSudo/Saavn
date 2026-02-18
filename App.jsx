@@ -57,8 +57,9 @@ function App() {
   
   const [moodPlaylists, setMoodPlaylists] = useState([]);
 
+  // Added topArtists to state
   const [homeData, setHomeData] = useState({ 
-    trending: [], charts: [], newAlbums: [], editorial: [], radio: [], love: [], fresh: [], nineties: [], hindiPop: [] 
+    trending: [], charts: [], newAlbums: [], editorial: [], radio: [], topArtists: [], love: [], fresh: [], nineties: [], hindiPop: [] 
   });
   
   // Details & Modals
@@ -121,7 +122,8 @@ function App() {
         fetch(`${API_BASE}/search/playlists?query=Top Charts&limit=15`).then(r=>r.json()).catch(()=>({})),
         fetch(`${API_BASE}/search/albums?query=New&limit=15`).then(r=>r.json()).catch(()=>({})),
         fetch(`${API_BASE}/search/playlists?query=Editors Pick&limit=15`).then(r=>r.json()).catch(()=>({})),
-        fetch(`${API_BASE}/search/artists?query=Best&limit=15`).then(r=>r.json()).catch(()=>({})),
+        fetch(`${API_BASE}/search/artists?query=Best&limit=15`).then(r=>r.json()).catch(()=>({})), // Radio
+        fetch(`${API_BASE}/search/artists?query=Top Artists&limit=15`).then(r=>r.json()).catch(()=>({})), // NEW: Top Artists
         fetch(`${API_BASE}/search/playlists?query=Love&limit=15`).then(r=>r.json()).catch(()=>({})),
         fetch(`${API_BASE}/search/playlists?query=Fresh Hits&limit=15`).then(r=>r.json()).catch(()=>({})),
         fetch(`${API_BASE}/search/playlists?query=90s Bollywood&limit=15`).then(r=>r.json()).catch(()=>({})),
@@ -134,10 +136,11 @@ function App() {
         newAlbums: results[2]?.data?.results || [], 
         editorial: results[3]?.data?.results || [],
         radio: results[4]?.data?.results || [],
-        love: results[5]?.data?.results || [],
-        fresh: results[6]?.data?.results || [],
-        nineties: results[7]?.data?.results || [],
-        hindiPop: results[8]?.data?.results || []
+        topArtists: results[5]?.data?.results || [], // Store new data
+        love: results[6]?.data?.results || [],
+        fresh: results[7]?.data?.results || [],
+        nineties: results[8]?.data?.results || [],
+        hindiPop: results[9]?.data?.results || []
       });
     } catch(e) { console.error("Home Error", e); } 
     finally { setLoading(false); }
@@ -153,10 +156,7 @@ function App() {
         fetch(`${API_BASE}/search/artists?query=${encodeURIComponent(searchQuery)}`).then(r=>r.json()),
         fetch(`${API_BASE}/search/playlists?query=${encodeURIComponent(searchQuery)}`).then(r=>r.json())
       ]);
-      setResSongs(s?.data?.results || []);
-      setResAlbums(a?.data?.results || []);
-      setResArtists(ar?.data?.results || []);
-      setResPlaylists(p?.data?.results || []);
+      setResSongs(s?.data?.results || []); setResAlbums(a?.data?.results || []); setResArtists(ar?.data?.results || []); setResPlaylists(p?.data?.results || []);
     } catch(e) { console.error(e); } finally { setLoading(false); }
   };
 
@@ -183,7 +183,6 @@ function App() {
     setCurrentSong(s);
     addToHistory(s);
     
-    // Quality selection logic
     const urlObj = s.downloadUrl?.find(u => u.quality === quality);
     const url = urlObj ? urlObj.url : (s.downloadUrl?.[s.downloadUrl.length-1]?.url || s.downloadUrl?.[0]?.url);
 
@@ -200,7 +199,6 @@ function App() {
   const handleQualityChange = (newQ) => {
     setQuality(newQ);
     if(currentSong && isPlaying) {
-        // Re-trigger play to switch source while keeping position if possible (complex, simple reload here)
         playSong(queue, qIndex); 
         toast.success(`Quality set to ${newQ}`);
     }
@@ -365,7 +363,7 @@ function App() {
     }
   }, [currentSong, isPlaying, queue, qIndex]);
 
-  useEffect(() => { document.title = currentSong ? `${getName(currentSong)} • Void` : "Void Music"; }, [currentSong]);
+  useEffect(() => { document.title = currentSong ? `${getName(currentSong)} • Aura` : "Aura Music"; }, [currentSong]);
 
   if(view==='loading') return <div style={{height:'100vh',background:'black',display:'flex',justifyContent:'center',alignItems:'center',color:'white'}}>Loading...</div>;
 
@@ -373,7 +371,7 @@ function App() {
     <div className="auth-container">
         <Toaster/>
         <div className="auth-box">
-            <h1 className="brand">Void</h1>
+            <h1 className="brand">Aura.</h1>
             <input className="auth-input" placeholder="Email" onChange={e=>setAuthInput({...authInput,email:e.target.value})}/>
             <input className="auth-input" type="password" placeholder="Password" onChange={e=>setAuthInput({...authInput,password:e.target.value})}/>
             <button className="auth-btn" onClick={handleAuth}>{authMode==='login'?'Sign In':'Sign Up'}</button>
@@ -446,10 +444,11 @@ function App() {
 
         {/* SIDEBAR */}
         <div className="sidebar">
-            <div className="brand">Void</div>
+            <div className="brand">Aura.</div>
             <div className="nav-links">
                 <div className={`nav-item ${tab==='home'?'active':''}`} onClick={()=>setTab('home')}><Icons.Home/> Home</div>
                 <div className={`nav-item ${tab==='library'?'active':''}`} onClick={()=>setTab('library')}><Icons.Library/> Liked Songs</div>
+                
                 <div className="nav-section-title">My Playlists</div>
                 {userPlaylists.map(pl => (
                     <div key={pl.id} className={`nav-item ${selectedItem?.id===pl.id?'active':''}`} onClick={()=>handleCardClick(pl, 'playlist_custom')}>
@@ -602,7 +601,7 @@ function App() {
                             <p>Discover new music, fresh albums, and curated playlists.</p>
                         </div>
 
-                        {/* History */}
+                        {/* 1. History */}
                         {history.length > 0 && (
                             <div className="section">
                                 <div className="section-header">Recently Played</div>
@@ -617,7 +616,7 @@ function App() {
                             </div>
                         )}
 
-                        {/* Moods */}
+                        {/* 2. Moods */}
                         <div className="section">
                             <div className="section-header">Moods</div>
                             <div className="horizontal-scroll">
@@ -629,7 +628,7 @@ function App() {
                             </div>
                         </div>
 
-                        {/* Trending */}
+                        {/* 3. Trending */}
                         <div className="section">
                             <div className="section-header">Trending Now</div>
                             <div className="horizontal-scroll">
@@ -647,7 +646,7 @@ function App() {
                             </div>
                         </div>
 
-                        {/* Charts */}
+                        {/* 4. Top Charts */}
                         <div className="section">
                             <div className="section-header">Top Charts</div>
                             <div className="horizontal-scroll">
@@ -661,7 +660,7 @@ function App() {
                             </div>
                         </div>
 
-                        {/* New Albums */}
+                        {/* 5. New Albums */}
                         <div className="section">
                             <div className="section-header">New Albums</div>
                             <div className="horizontal-scroll">
@@ -675,7 +674,7 @@ function App() {
                             </div>
                         </div>
 
-                        {/* Radio */}
+                        {/* 6. Radio (Artists) */}
                         <div className="section">
                             <div className="section-header">Radio Stations</div>
                             <div className="horizontal-scroll">
@@ -689,7 +688,21 @@ function App() {
                             </div>
                         </div>
 
-                        {/* Editorial */}
+                        {/* NEW: 6.5 Top Artists */}
+                        <div className="section">
+                            <div className="section-header">Top Artists</div>
+                            <div className="horizontal-scroll">
+                                {homeData.topArtists.map(a => (
+                                    <div key={a.id} className="card" onClick={()=>handleCardClick(a, 'artist')}>
+                                        <img src={getImg(a.image)} alt="" style={{borderRadius:'50%'}}/>
+                                        <h3 style={{textAlign:'center'}}>{getName(a)}</h3>
+                                        <p style={{textAlign:'center', fontSize:'0.8rem'}}>Artist</p>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+
+                        {/* 7. Editorial */}
                         <div className="section">
                             <div className="section-header">Editorial Picks</div>
                             <div className="horizontal-scroll">
@@ -703,7 +716,7 @@ function App() {
                             </div>
                         </div>
 
-                        {/* Fresh */}
+                        {/* 8. Fresh Hits */}
                         <div className="section">
                             <div className="section-header">Fresh Hits</div>
                             <div className="horizontal-scroll">
@@ -717,7 +730,7 @@ function App() {
                             </div>
                         </div>
 
-                        {/* 90s */}
+                        {/* 9. 90s Magic */}
                         <div className="section">
                             <div className="section-header">Best of 90s</div>
                             <div className="horizontal-scroll">
@@ -731,7 +744,7 @@ function App() {
                             </div>
                         </div>
 
-                        {/* Hindi Pop */}
+                        {/* 10. Hindi Pop */}
                         <div className="section">
                             <div className="section-header">New Hindi Pop</div>
                             <div className="horizontal-scroll">
@@ -790,7 +803,7 @@ function App() {
                                 {repeatMode==='one' ? <Icons.RepeatOne/> : <Icons.Repeat/>}
                             </button>
                         </div>
-                        {/* TIMELINE */}
+                        {/* --- TIMELINE --- */}
                         <div className="progress-container">
                             <span>{formatTime(progress)}</span>
                             <div className="progress-rail" onClick={handleSeek}>
