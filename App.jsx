@@ -6,7 +6,7 @@ import { signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, on
 import { doc, setDoc, getDoc, updateDoc, arrayUnion, arrayRemove } from 'firebase/firestore';
 
 // API
-const API_BASE = "https://saavn.sumit.co/api";
+const API_BASE = "https://jio-codesudo.vercel.app/api";
 
 // Icons
 const Icons = {
