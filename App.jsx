@@ -29,7 +29,6 @@ import { doc, setDoc, getDoc, updateDoc, arrayUnion, arrayRemove, collection, ad
 
 const API_BASE = "https://saavn.sumit.co/api";
 
-// Moods Static Data
 const MOODS = [
   { id: 'mood-party', name: 'Party', color: '#e57373', query: 'Party Hits' },
   { id: 'mood-romance', name: 'Romance', color: '#f06292', query: 'Love Songs' },
@@ -59,17 +58,8 @@ function App() {
   const [resArtists, setResArtists] = useState([]);
   const [resPlaylists, setResPlaylists] = useState([]);
   
-  // Home Data Sections
-  const [homeData, setHomeData] = useState({
-    trending: [],
-    charts: [],
-    newAlbums: [],
-    editorial: [],
-    radio: [],
-    love: [],
-    fresh: [],
-    nineties: [],
-    hindiPop: []
+  const [homeData, setHomeData] = useState({ 
+    trending: [], charts: [], newAlbums: [], editorial: [], radio: [], love: [], fresh: [], nineties: [], hindiPop: [] 
   });
   
   // --- DETAILS & MODALS ---
@@ -102,20 +92,20 @@ function App() {
   const getDesc = (i) => i?.primaryArtists || i?.description || i?.year || "";
   const isLiked = (id) => likedSongs.some(s => String(s.id) === String(id));
 
-  // --- 1. DATA FETCHING (EXPANDED FOR JIOSAAVN HOME) ---
+  // --- 1. DATA FETCHING ---
   const fetchHome = async () => {
     setLoading(true);
     try {
       const results = await Promise.all([
-        fetch(`${API_BASE}/search/songs?query=Top 50&limit=15`).then(r=>r.json()).catch(()=>({})), // Trending
-        fetch(`${API_BASE}/search/playlists?query=Top Charts&limit=15`).then(r=>r.json()).catch(()=>({})), // Top Charts
-        fetch(`${API_BASE}/search/albums?query=New&limit=15`).then(r=>r.json()).catch(()=>({})), // New Releases
-        fetch(`${API_BASE}/search/playlists?query=Editors Pick&limit=15`).then(r=>r.json()).catch(()=>({})), // Editorial
-        fetch(`${API_BASE}/search/artists?query=Best&limit=15`).then(r=>r.json()).catch(()=>({})), // Radio (Artist Stations)
-        fetch(`${API_BASE}/search/playlists?query=Love&limit=15`).then(r=>r.json()).catch(()=>({})), // Month of Love
-        fetch(`${API_BASE}/search/playlists?query=Fresh Hits&limit=15`).then(r=>r.json()).catch(()=>({})), // Fresh Hits
-        fetch(`${API_BASE}/search/playlists?query=90s Bollywood&limit=15`).then(r=>r.json()).catch(()=>({})), // Best of 90s
-        fetch(`${API_BASE}/search/albums?query=New Hindi Pop&limit=15`).then(r=>r.json()).catch(()=>({})) // New Hindi Pop
+        fetch(`${API_BASE}/search/songs?query=Top 50&limit=15`).then(r=>r.json()).catch(()=>({})),
+        fetch(`${API_BASE}/search/playlists?query=Top Charts&limit=15`).then(r=>r.json()).catch(()=>({})),
+        fetch(`${API_BASE}/search/albums?query=New&limit=15`).then(r=>r.json()).catch(()=>({})),
+        fetch(`${API_BASE}/search/playlists?query=Editors Pick&limit=15`).then(r=>r.json()).catch(()=>({})),
+        fetch(`${API_BASE}/search/artists?query=Best&limit=15`).then(r=>r.json()).catch(()=>({})),
+        fetch(`${API_BASE}/search/playlists?query=Love&limit=15`).then(r=>r.json()).catch(()=>({})),
+        fetch(`${API_BASE}/search/playlists?query=Fresh Hits&limit=15`).then(r=>r.json()).catch(()=>({})),
+        fetch(`${API_BASE}/search/playlists?query=90s Bollywood&limit=15`).then(r=>r.json()).catch(()=>({})),
+        fetch(`${API_BASE}/search/albums?query=New Hindi Pop&limit=15`).then(r=>r.json()).catch(()=>({}))
       ]);
 
       setHomeData({ 
@@ -256,12 +246,25 @@ function App() {
       setSelectedItem(item); setTab('details'); setDetailsSongs(item.songs || []); 
     } 
     else if (type === 'mood') {
-        // Handle Mood Click - Search for that mood
-        setSearchQuery(item.query);
-        doSearch();
-        // Or directly fetch playlists for mood
+        // FIXED MOOD LOGIC: Specific Fetch, No Global Search text
+        setLoading(true);
+        setTab('search');
+        // Clear previous generic results to hide irrelevant sections
+        setResAlbums([]);
+        setResArtists([]);
+        
+        try {
+            const [p, s] = await Promise.all([
+                fetch(`${API_BASE}/search/playlists?query=${encodeURIComponent(item.query)}`).then(r=>r.json()),
+                fetch(`${API_BASE}/search/songs?query=${encodeURIComponent(item.query)}`).then(r=>r.json())
+            ]);
+            setResPlaylists(p?.data?.results || []);
+            setResSongs(s?.data?.results || []);
+        } catch(e) { console.error(e); } 
+        finally { setLoading(false); }
     }
     else {
+      // Handles Albums, Playlists, Artists
       setSelectedItem(item); setTab('details'); setLoading(true); setDetailsSongs([]);
       try {
         let endpoint = '';
@@ -495,7 +498,22 @@ function App() {
                                             <p>{getDesc(s)}</p>
                                             <div className="card-actions">
                                                 <button className={`btn-card-action ${isLiked(s.id)?'liked':''}`} onClick={(e)=>{e.stopPropagation(); toggleLike(s)}}><Icons.Heart/></button>
+                                                <button className="btn-card-action" onClick={(e)=>{e.stopPropagation(); setSongToAdd(s); setShowAddToPlaylistModal(true);}}><Icons.Plus/></button>
                                             </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </>
+                        )}
+                        {resPlaylists.length > 0 && (
+                            <>
+                                <div className="section-header" style={{marginTop:40}}>Playlists</div>
+                                <div className="horizontal-scroll">
+                                    {resPlaylists.map(p => (
+                                        <div key={p.id} className="card" onClick={()=>handleCardClick(p, 'playlist')}>
+                                            <img src={getImg(p.image)} alt=""/>
+                                            <h3>{getName(p)}</h3>
+                                            <p>{p.language}</p>
                                         </div>
                                     ))}
                                 </div>
@@ -523,20 +541,6 @@ function App() {
                                         <div key={a.id} className="card" onClick={()=>handleCardClick(a, 'artist')}>
                                             <img src={getImg(a.image)} alt="" style={{borderRadius:'50%'}}/>
                                             <h3 style={{textAlign:'center'}}>{getName(a)}</h3>
-                                        </div>
-                                    ))}
-                                </div>
-                            </>
-                        )}
-                        {resPlaylists.length > 0 && (
-                            <>
-                                <div className="section-header" style={{marginTop:40}}>Playlists</div>
-                                <div className="horizontal-scroll">
-                                    {resPlaylists.map(p => (
-                                        <div key={p.id} className="card" onClick={()=>handleCardClick(p, 'playlist')}>
-                                            <img src={getImg(p.image)} alt=""/>
-                                            <h3>{getName(p)}</h3>
-                                            <p>{p.language}</p>
                                         </div>
                                     ))}
                                 </div>
@@ -575,6 +579,7 @@ function App() {
                                         <p>{getDesc(s)}</p>
                                         <div className="card-actions">
                                             <button className={`btn-card-action ${isLiked(s.id)?'liked':''}`} onClick={(e)=>{e.stopPropagation(); toggleLike(s)}}><Icons.Heart/></button>
+                                            <button className="btn-card-action" onClick={(e)=>{e.stopPropagation(); setSongToAdd(s); setShowAddToPlaylistModal(true);}}><Icons.Plus/></button>
                                         </div>
                                     </div>
                                 ))}
