@@ -69,7 +69,7 @@ const APIs = {
     name: 'SoundCloud',
     token: null, 
     clientId: import.meta.env.VITE_SOUNDCLOUD_CLIENT_ID,         // <--- PASTE HERE
-    clientSecret: import.meta.env.VITE_SOUNDCLOUD_CLIENT_SECRET,, // <--- PASTE HERE
+    clientSecret: import.meta.env.VITE_SOUNDCLOUD_CLIENT_SECRET, // <--- PASTE HERE
     
     auth: async function() {
       if (this.token) return this.token; 
