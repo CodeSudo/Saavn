@@ -33,11 +33,9 @@ import { doc, setDoc, getDoc, updateDoc, arrayUnion, arrayRemove, collection, ad
 const APIs = {
   saavn: {
     name: 'JioSaavn',
-    baseUrl: "https://jio-codesudo.vercel.app/api",
     search: async (query) => {
       const res = await fetch(`https://jio-codesudo.vercel.app/api/search/songs?query=${encodeURIComponent(query)}`);
       const data = await res.json();
-      // Normalize Saavn Data
       return (data.data?.results || []).map(item => ({
         id: item.id,
         name: item.name,
@@ -49,31 +47,36 @@ const APIs = {
       }));
     }
   },
-  jamendo: {
-    name: 'Jamendo',
-    baseUrl: "https://api.jamendo.com/v3.0",
+  itunes: {
+    name: 'Apple Music',
     search: async (query) => {
-      // Using public demo client_id 'a5b7b041'
-      const res = await fetch(`https://api.jamendo.com/v3.0/tracks/?client_id=a5b7b041&format=jsonpretty&limit=15&search=${encodeURIComponent(query)}`);
+      const res = await fetch(`https://itunes.apple.com/search?term=${encodeURIComponent(query)}&entity=song&limit=20`);
       const data = await res.json();
-      // Normalize Jamendo Data to match Saavn structure
       return (data.results || []).map(item => ({
-        id: item.id,
-        name: item.name,
-        primaryArtists: item.artist_name,
-        image: [{ url: item.image }], // Adapt to array format
-        downloadUrl: [{ url: item.audio }], // Adapt to array format
-        duration: item.duration,
-        source: 'jamendo'
+        id: String(item.trackId),
+        name: item.trackName,
+        primaryArtists: item.artistName,
+        image: [{ url: item.artworkUrl100.replace('100x100bb', '600x600bb') }], 
+        downloadUrl: [{ url: item.previewUrl, quality: '320kbps' }],
+        duration: Math.floor(item.trackTimeMillis / 1000),
+        source: 'itunes'
       }));
     }
   },
-  // Placeholder for SoundCloud (Requires Key)
-  soundcloud: {
-    name: 'SoundCloud (Beta)',
+  audius: {
+    name: 'Audius (EDM/Indie)',
     search: async (query) => {
-      toast('SoundCloud API Key Required');
-      return [];
+      const res = await fetch(`https://api.audius.co/v1/tracks/search?query=${encodeURIComponent(query)}&app_name=AuraMusicApp`);
+      const data = await res.json();
+      return (data.data || []).map(item => ({
+        id: item.id,
+        name: item.title,
+        primaryArtists: item.user.name,
+        image: [{ url: item.artwork ? item.artwork['480x480'] : "https://via.placeholder.com/150" }],
+        downloadUrl: [{ url: `https://api.audius.co/v1/tracks/${item.id}/stream?app_name=AuraMusicApp`, quality: '320kbps' }],
+        duration: item.duration,
+        source: 'audius'
+      }));
     }
   }
 };
