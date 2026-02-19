@@ -9,12 +9,12 @@ import { getFirestore, doc, setDoc, getDoc, updateDoc, arrayUnion, arrayRemove, 
 
 // 1. EMBEDDED CONFIG (Prevents "File Not Found" Crashes)
 const firebaseConfig = {
-  apiKey: "AIzaSyB_DEMO_KEY_FOR_UI_TESTING_ONLY", 
-  authDomain: "demo-project.firebaseapp.com",
-  projectId: "demo-project",
-  storageBucket: "demo-project.appspot.com",
-  messagingSenderId: "123456789",
-  appId: "1:123456789:web:abcdef123456"
+  apiKey: "AIzaSyCBiQ0gDPdl2AXexDqp0olpR_BiFplaQZM", 
+  authDomain: "saavn-github.firebaseapp.com",
+  projectId: "saavn-github",
+  storageBucket: "saavn-github.firebasestorage.app",
+  messagingSenderId: "212533131865",
+  appId: "1:212533131865:web:02dfb66400fb7b61278f48"
 };
 
 // Initialize Firebase safely
