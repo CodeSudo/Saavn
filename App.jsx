@@ -68,8 +68,8 @@ const APIs = {
   soundcloud: {
     name: 'SoundCloud',
     token: null, 
-    clientId: 'PASTE_YOUR_CLIENT_ID_HERE',         // <--- PASTE HERE
-    clientSecret: 'PASTE_YOUR_CLIENT_SECRET_HERE', // <--- PASTE HERE
+    clientId: 'Vpc0K04zyHIKYXXc1fdF6qnT9RVxEalM',         // <--- PASTE HERE
+    clientSecret: 'AQl4lr4ZL9bZ5M9aXgySocPCeHOrHj0J', // <--- PASTE HERE
     
     auth: async function() {
       if (this.token) return this.token; 
