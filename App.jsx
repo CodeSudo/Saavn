@@ -32,6 +32,7 @@ import { doc, setDoc, getDoc, updateDoc, arrayUnion, arrayRemove, collection, ad
 const API_BASE = "https://jio-codesudo.vercel.app/api";
 
 // --- MULTI-SOURCE ENGINE ---
+// --- MULTI-SOURCE API ENGINE ---
 const APIs = {
   saavn: {
     name: 'JioSaavn',
@@ -62,6 +63,52 @@ const APIs = {
         downloadUrl: [{ url: item.previewUrl, quality: '320kbps' }],
         duration: Math.floor((item.trackTimeMillis || 0) / 1000),
         source: 'itunes'
+      }));
+    }
+  },
+  soundcloud: {
+    name: 'SoundCloud',
+    token: null, // We will store your generated access token here
+    clientId: 'Vpc0K04zyHIKYXXc1fdF6qnT9RVxEalM',         // <--- PASTE HERE
+    clientSecret: 'AQl4lr4ZL9bZ5M9aXgySocPCeHOrHj0J', // <--- PASTE HERE
+    
+    // 1. Authenticate securely with SoundCloud
+    auth: async function() {
+      if (this.token) return this.token; // Use existing token if we already logged in
+      const res = await fetch('https://api.soundcloud.com/oauth2/token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({
+          grant_type: 'client_credentials',
+          client_id: this.clientId,
+          client_secret: this.clientSecret
+        })
+      });
+      const data = await res.json();
+      this.token = data.access_token;
+      return this.token;
+    },
+
+    // 2. Search and Format
+    search: async function(query) {
+      const token = await this.auth();
+      // Fetch tracks using your official OAuth Token
+      const res = await fetch(`https://api.soundcloud.com/tracks?q=${encodeURIComponent(query)}&limit=25`, {
+        headers: { 'Authorization': `OAuth ${token}` }
+      });
+      const data = await res.json();
+      
+      // Filter out tracks that artists have locked, and map to our Player's format
+      return (data || []).filter(item => item.streamable).map(item => ({
+        id: item.id,
+        name: item.title,
+        primaryArtists: item.user?.username || "Unknown Artist",
+        // Upgrade low-res artwork to 500x500
+        image: [{ url: item.artwork_url ? item.artwork_url.replace('large', 't500x500') : "https://via.placeholder.com/150" }],
+        // Provide the direct MP3 stream URL
+        downloadUrl: [{ url: `${item.stream_url}?client_id=${this.clientId}`, quality: '320kbps' }],
+        duration: Math.floor(item.duration / 1000),
+        source: 'soundcloud'
       }));
     }
   }
@@ -552,6 +599,7 @@ function App() {
                     >
                       <option value="saavn">JioSaavn</option>
                       <option value="itunes">Apple Music</option>
+                      <option value="soundcloud">SoundCloud</option>
                     </select>
                     <div style={{width: 1, height: 20, background: '#333', marginRight: 8}}></div>
 
