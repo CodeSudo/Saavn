@@ -2,10 +2,49 @@ import React, { useState, useRef, useEffect } from 'react';
 import './App.css';
 import toast, { Toaster } from 'react-hot-toast';
 
-// --- FIREBASE ---
-import { auth, db } from './firebase'; 
-import { signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, onAuthStateChanged } from 'firebase/auth';
-import { doc, setDoc, getDoc, updateDoc, arrayUnion, arrayRemove, collection, addDoc, onSnapshot, query } from 'firebase/firestore';
+// --- FIREBASE LIBRARIES ---
+import { initializeApp } from "firebase/app";
+import { 
+  getAuth, 
+  signInWithEmailAndPassword, 
+  createUserWithEmailAndPassword, 
+  signOut, 
+  onAuthStateChanged 
+} from 'firebase/auth';
+import { 
+  getFirestore, 
+  doc, 
+  setDoc, 
+  getDoc, 
+  updateDoc, 
+  arrayUnion, 
+  arrayRemove, 
+  collection, 
+  addDoc, 
+  onSnapshot, 
+  query 
+} from 'firebase/firestore';
+
+// --- 1. EMBEDDED FIREBASE CONFIG (No separate file needed) ---
+const firebaseConfig = {
+  apiKey: "AIzaSyCBiQ0gDPdl2AXexDqp0olpR_BiFplaQZM",
+  authDomain: "saavn-github.firebaseapp.com",
+  projectId: "saavn-github",
+  storageBucket: "saavn-github.firebasestorage.app",
+  messagingSenderId: "212533131865",
+  appId: "1:212533131865:web:02dfb66400fb7b61278f48",
+  measurementId: "G-C748BVMQFF",
+};
+
+// Initialize Firebase safely
+let auth, db;
+try {
+  const app = initializeApp(firebaseConfig);
+  auth = getAuth(app);
+  db = getFirestore(app);
+} catch (error) {
+  console.warn("Firebase failed to init (expected if offline):", error);
+}
 
 const API_BASE = "https://saavn.sumit.co/api";
 
@@ -15,7 +54,6 @@ const MOODS = [
   { id: 'm3', name: 'Sad', color: '#ba68c8', query: 'Sad Songs' },
   { id: 'm4', name: 'Workout', color: '#ffb74d', query: 'Gym Motivation' },
   { id: 'm5', name: 'Chill', color: '#4db6ac', query: 'Chill Lo-Fi' },
-  { id: 'm6', name: 'Retro', color: '#7986cb', query: 'Retro Classics' },
 ];
 
 const ICONS = {
@@ -38,12 +76,12 @@ const ICONS = {
 };
 
 function App() {
-  // *** BYPASS FIX: Force user to be logged in by default ***
-  const [user, setUser] = useState({ email: 'demo@aura.com', uid: 'demo-user' });
-  const [view, setView] = useState('app'); // Force 'app' view
+  const [view, setView] = useState('loading');
   const [tab, setTab] = useState('home');
+  // FORCE LOGGED IN USER to prevent login screen loop
+  const [user, setUser] = useState({ email: 'user@aura.music', uid: 'demo-user-123' });
   
-  // Data with Safe Defaults
+  // Data
   const [homeData, setHomeData] = useState({ 
     trending: [], charts: [], newAlbums: [], radio: [], topArtists: [], editorial: [], fresh: [], nineties: [], hindiPop: [] 
   });
@@ -100,7 +138,7 @@ function App() {
     const newHist = [song, ...prev.filter(s => String(s.id) !== String(song.id))].slice(0, 15);
     localStorage.setItem('musiq_history', JSON.stringify(newHist));
     setHistory(newHist);
-    if(user && db && user.uid !== 'demo-user') {
+    if(user && db && user.uid !== 'demo-user-123') {
         updateDoc(doc(db, "users", user.uid), { history: newHist }).catch(()=>{});
     }
   };
@@ -137,7 +175,7 @@ function App() {
         hindiPop: results[9]?.data?.results || []
       });
     } catch(e) { console.error("Home Error", e); } 
-    finally { setLoading(false); }
+    finally { setLoading(false); setView('app'); } // Force view to 'app'
   };
 
   const doSearch = async () => {
@@ -231,38 +269,27 @@ function App() {
   const toggleLike = async (item) => {
     if(!user) return toast.error("Please Login");
     const liked = isLiked(item.id);
-    // Demo Mode check
-    if (user.uid === 'demo-user') {
+    if(user.uid === 'demo-user-123') { // Local State for Demo
         if(liked) setLikedSongs(likedSongs.filter(s=>String(s.id)!==String(item.id)));
-        else {
-             const clean = { id: String(item.id), name: getName(item), primaryArtists: getDesc(item), image: item.image||[], downloadUrl: item.downloadUrl||[], duration: item.duration||0 };
-             setLikedSongs([...likedSongs, clean]);
-        }
+        else setLikedSongs([...likedSongs, item]);
         return;
     }
-
     const userRef = doc(db, "users", user.uid);
     if(liked) {
-        const toRemove = likedSongs.find(s=>String(s.id)===String(item.id));
-        if(toRemove) {
-            setLikedSongs(likedSongs.filter(s=>String(s.id)!==String(item.id)));
-            await updateDoc(userRef, { likedSongs: arrayRemove(toRemove) });
-            toast("Removed from Library", { icon: '💔' });
-        }
+        setLikedSongs(likedSongs.filter(s=>String(s.id)!==String(item.id)));
+        await updateDoc(userRef, { likedSongs: arrayRemove(item) });
     } else {
         const clean = { id: String(item.id), name: getName(item), primaryArtists: getDesc(item), image: item.image||[], downloadUrl: item.downloadUrl||[], duration: item.duration||0 };
         setLikedSongs([...likedSongs, clean]);
         await updateDoc(userRef, { likedSongs: arrayUnion(clean) });
-        toast.success("Added to Library");
     }
   };
 
   const createPlaylist = async () => {
     if(!newPlaylistName.trim()) return;
-    // Demo mode
-    if(user.uid === 'demo-user') {
-        setUserPlaylists([...userPlaylists, { id: Date.now(), name: newPlaylistName, songs: [] }]);
-        setNewPlaylistName(""); setShowPlaylistModal(false); toast.success("Playlist Created (Demo)");
+    if(user.uid === 'demo-user-123') {
+        setUserPlaylists([...userPlaylists, {id: Date.now(), name: newPlaylistName, songs: []}]);
+        setNewPlaylistName(""); setShowPlaylistModal(false); toast.success("Playlist Created (Local)");
         return;
     }
     try {
@@ -274,10 +301,8 @@ function App() {
 
   const addToPlaylist = async (playlistId) => {
     if(!songToAdd) return;
-    // Demo mode
-    if(user.uid === 'demo-user') {
-        toast.success("Added to Playlist (Demo)"); setShowAddToPlaylistModal(false);
-        return;
+    if(user.uid === 'demo-user-123') {
+        toast.success("Added to Playlist (Local)"); setShowAddToPlaylistModal(false); return;
     }
     try {
         const ref = doc(db, `users/${user.uid}/playlists/${playlistId}`);
@@ -310,11 +335,14 @@ function App() {
 
   // --- AUTH & EFFECTS ---
   useEffect(() => {
-    if(!auth) { setView('app'); fetchHome(); return; } // Safety Bypass
+    fetchHome(); // ALWAYS FETCH HOME DATA
+    
+    // Safety check: If Firebase not loaded, keep demo user
+    if (!auth) return;
 
     const unsub = onAuthStateChanged(auth, async (u) => {
         if(u) {
-            setUser(u); setView('app'); fetchHome();
+            setUser(u); setView('app');
             try {
                 const userSnap = await getDoc(doc(db, "users", u.uid));
                 if(userSnap.exists()) {
@@ -327,16 +355,14 @@ function App() {
                 const q = query(collection(db, `users/${u.uid}/playlists`));
                 onSnapshot(q, (snapshot) => setUserPlaylists(snapshot.docs.map(d => ({id: d.id, ...d.data()}))));
             } catch {}
-        } else { 
-            // !!! BYPASS FOR YOU: If no user found, STAY logged in as Demo !!!
-            // setUser(null); setView('auth'); 
-            fetchHome(); // Load data anyway
-        }
+        } 
+        // Note: We do NOT set user to null on else, to keep the Demo mode active for you.
     });
     return () => unsub();
   }, []);
 
   const handleAuth = async () => {
+    if (!auth) { toast.error("Firebase not configured"); return; }
     const toastId = toast.loading("Authenticating...");
     try {
         if(authMode==='signup') {
@@ -470,7 +496,7 @@ function App() {
             <div className="nav-links">
                 <div className={`nav-item ${tab==='home'?'active':''}`} onClick={()=>setTab('home')}><Icons.Home/> Home</div>
                 <div className={`nav-item ${tab==='search'?'active':''}`} onClick={()=>setTab('search')}><Icons.Search/> Search</div>
-                <div className={`nav-item ${tab==='library'?'active':''}`} onClick={()=>setTab('library')}><Icons.Library/> Liked Songs</div>
+                <div className={`nav-item ${tab==='library'?'active':''}`} onClick={()=>setTab('library')}><Icons.Library/> Library</div>
                 <div className={`nav-item ${tab==='profile'?'active':''}`} onClick={()=>setTab('profile')}><span style={{fontSize:'1.2rem'}}>👤</span> Profile</div>
                 
                 <div className="nav-section-title">My Playlists</div>
