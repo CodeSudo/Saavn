@@ -42,7 +42,8 @@ const ICONS = {
 function App() {
   const [view, setView] = useState('loading');
   const [tab, setTab] = useState('home');
-  const [user, setUser] = useState(null);
+// This forces the app to think you are already logged in
+const [user, setUser] = useState({ email: 'demo@aura.com', uid: 'demo-user' });
   
   // Data with Safe Defaults
   const [homeData, setHomeData] = useState({ 
