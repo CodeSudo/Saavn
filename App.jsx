@@ -28,7 +28,7 @@ import { auth, db } from './firebase';
 import { signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, onAuthStateChanged } from 'firebase/auth';
 import { doc, setDoc, getDoc, updateDoc, arrayUnion, arrayRemove, collection, addDoc, onSnapshot, query } from 'firebase/firestore';
 
-const API_BASE = "https://saavn.sumit.co/api";
+const API_BASE = "https://jio-codesudo.vercel.app/api";
 
 const MOODS = [
   { id: 'm1', name: 'Party', color: '#e57373', query: 'Party Hits' },
