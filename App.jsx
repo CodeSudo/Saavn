@@ -2,57 +2,17 @@ import React, { useState, useRef, useEffect } from 'react';
 import './App.css';
 import toast, { Toaster } from 'react-hot-toast';
 
-// --- FIREBASE LIBRARIES ---
-import { initializeApp } from "firebase/app";
-import { 
-  getAuth, 
-  signInWithEmailAndPassword, 
-  createUserWithEmailAndPassword, 
-  signOut, 
-  onAuthStateChanged 
-} from 'firebase/auth';
-import { 
-  getFirestore, 
-  doc, 
-  setDoc, 
-  getDoc, 
-  updateDoc, 
-  arrayUnion, 
-  arrayRemove, 
-  collection, 
-  addDoc, 
-  onSnapshot, 
-  query 
-} from 'firebase/firestore';
-
-// --- 1. EMBEDDED FIREBASE CONFIG (No separate file needed) ---
-const firebaseConfig = {
-  apiKey: "AIzaSyB_DEMO_KEY_FOR_UI_TESTING_ONLY", 
-  authDomain: "demo-project.firebaseapp.com",
-  projectId: "demo-project",
-  storageBucket: "demo-project.appspot.com",
-  messagingSenderId: "123456789",
-  appId: "1:123456789:web:abcdef123456"
-};
-
-// Initialize Firebase safely
-let auth, db;
-try {
-  const app = initializeApp(firebaseConfig);
-  auth = getAuth(app);
-  db = getFirestore(app);
-} catch (error) {
-  console.warn("Firebase failed to init (expected if offline):", error);
-}
-
+// --- API CONFIG ---
 const API_BASE = "https://saavn.sumit.co/api";
 
+// --- STATIC DATA ---
 const MOODS = [
   { id: 'm1', name: 'Party', color: '#e57373', query: 'Party Hits' },
   { id: 'm2', name: 'Romance', color: '#f06292', query: 'Love Songs' },
   { id: 'm3', name: 'Sad', color: '#ba68c8', query: 'Sad Songs' },
   { id: 'm4', name: 'Workout', color: '#ffb74d', query: 'Gym Motivation' },
   { id: 'm5', name: 'Chill', color: '#4db6ac', query: 'Chill Lo-Fi' },
+  { id: 'm6', name: 'Retro', color: '#7986cb', query: 'Retro Classics' },
 ];
 
 const ICONS = {
@@ -75,11 +35,13 @@ const ICONS = {
 };
 
 function App() {
-  const [view, setView] = useState('loading');
+  // --- STATE ---
+  // FORCE LOGGED IN USER to prevent black screen / login loops
+  const [user, setUser] = useState({ email: 'demo@aura.music', uid: 'demo-user-123' });
+  const [view, setView] = useState('app');
   const [tab, setTab] = useState('home');
-  // FORCE LOGGED IN USER to prevent login screen loop
-  const [user, setUser] = useState({ email: 'user@aura.music', uid: 'demo-user-123' });
-  
+  const [loading, setLoading] = useState(false);
+
   // Data
   const [homeData, setHomeData] = useState({ 
     trending: [], charts: [], newAlbums: [], radio: [], topArtists: [], editorial: [], fresh: [], nineties: [], hindiPop: [] 
@@ -90,6 +52,7 @@ function App() {
   const [resPlaylists, setResPlaylists] = useState([]);
   const [moodPlaylists, setMoodPlaylists] = useState([]);
   
+  // User Data (Local State Only for Stability)
   const [history, setHistory] = useState([]);
   const [likedSongs, setLikedSongs] = useState([]);
   const [userPlaylists, setUserPlaylists] = useState([]);
@@ -105,12 +68,7 @@ function App() {
   const [showAddToPlaylistModal, setShowAddToPlaylistModal] = useState(false);
   const [newPlaylistName, setNewPlaylistName] = useState("");
   const [songToAdd, setSongToAdd] = useState(null);
-  const [loading, setLoading] = useState(false);
   
-  // Auth
-  const [authMode, setAuthMode] = useState('login');
-  const [authInput, setAuthInput] = useState({ email: '', password: '' });
-
   // Player
   const audioRef = useRef(new Audio());
   const [isPlaying, setIsPlaying] = useState(false);
@@ -125,24 +83,27 @@ function App() {
   const [repeatMode, setRepeatMode] = useState('none'); 
 
   // Helpers
-  const getImg = (i) => { if(Array.isArray(i)) return i[i.length-1]?.url || i[0]?.url; return i || "https://via.placeholder.com/150"; }
+  const getImg = (i) => { 
+    if(!i) return "https://via.placeholder.com/150";
+    if(Array.isArray(i)) return i[i.length-1]?.url || i[0]?.url; 
+    return i; 
+  };
   const getName = (i) => i?.name || i?.title || "Unknown";
   const getDesc = (i) => i?.primaryArtists || i?.description || "";
   const isLiked = (id) => likedSongs.some(s => String(s.id) === String(id));
   const formatTime = (s) => { if(isNaN(s)) return "0:00"; const m=Math.floor(s/60), sc=Math.floor(s%60); return `${m}:${sc<10?'0'+sc:sc}`; };
 
-  // --- HISTORY LOGIC ---
+  // --- LOCAL HISTORY STORAGE ---
   const addToHistory = (song) => {
-    const prev = JSON.parse(localStorage.getItem('musiq_history') || '[]');
+    const prev = history;
     const newHist = [song, ...prev.filter(s => String(s.id) !== String(song.id))].slice(0, 15);
-    localStorage.setItem('musiq_history', JSON.stringify(newHist));
     setHistory(newHist);
-    if(user && db && user.uid !== 'demo-user-123') {
-        updateDoc(doc(db, "users", user.uid), { history: newHist }).catch(()=>{});
-    }
+    try { localStorage.setItem('musiq_history', JSON.stringify(newHist)); } catch(e){}
   };
 
-  useEffect(() => { setHistory(JSON.parse(localStorage.getItem('musiq_history') || '[]')); }, []);
+  useEffect(() => { 
+    try { setHistory(JSON.parse(localStorage.getItem('musiq_history') || '[]')); } catch(e){}
+  }, []);
 
   // --- DATA FETCHING ---
   const fetchHome = async () => {
@@ -174,7 +135,7 @@ function App() {
         hindiPop: results[9]?.data?.results || []
       });
     } catch(e) { console.error("Home Error", e); } 
-    finally { setLoading(false); setView('app'); } // Force view to 'app'
+    finally { setLoading(false); }
   };
 
   const doSearch = async () => {
@@ -265,50 +226,35 @@ function App() {
   };
 
   // --- PLAYLIST & LIKE ---
-  const toggleLike = async (item) => {
-    if(!user) return toast.error("Please Login");
+  const toggleLike = (item) => {
+    // Local Like Toggle (Demo Mode)
     const liked = isLiked(item.id);
-    if(user.uid === 'demo-user-123') { // Local State for Demo
-        if(liked) setLikedSongs(likedSongs.filter(s=>String(s.id)!==String(item.id)));
-        else setLikedSongs([...likedSongs, item]);
-        return;
-    }
-    const userRef = doc(db, "users", user.uid);
     if(liked) {
         setLikedSongs(likedSongs.filter(s=>String(s.id)!==String(item.id)));
-        await updateDoc(userRef, { likedSongs: arrayRemove(item) });
+        toast("Removed from Library", { icon: '💔' });
     } else {
         const clean = { id: String(item.id), name: getName(item), primaryArtists: getDesc(item), image: item.image||[], downloadUrl: item.downloadUrl||[], duration: item.duration||0 };
         setLikedSongs([...likedSongs, clean]);
-        await updateDoc(userRef, { likedSongs: arrayUnion(clean) });
+        toast.success("Added to Library");
     }
   };
 
-  const createPlaylist = async () => {
+  const createPlaylist = () => {
     if(!newPlaylistName.trim()) return;
-    if(user.uid === 'demo-user-123') {
-        setUserPlaylists([...userPlaylists, {id: Date.now(), name: newPlaylistName, songs: []}]);
-        setNewPlaylistName(""); setShowPlaylistModal(false); toast.success("Playlist Created (Local)");
-        return;
-    }
-    try {
-        const ref = collection(db, `users/${user.uid}/playlists`);
-        await addDoc(ref, { name: newPlaylistName, songs: [] });
-        setNewPlaylistName(""); setShowPlaylistModal(false); toast.success("Playlist Created");
-    } catch(e) { toast.error("Failed"); }
+    setUserPlaylists([...userPlaylists, { id: Date.now(), name: newPlaylistName, songs: [] }]);
+    setNewPlaylistName(""); setShowPlaylistModal(false); toast.success("Playlist Created");
   };
 
-  const addToPlaylist = async (playlistId) => {
+  const addToPlaylist = (playlistId) => {
     if(!songToAdd) return;
-    if(user.uid === 'demo-user-123') {
-        toast.success("Added to Playlist (Local)"); setShowAddToPlaylistModal(false); return;
-    }
-    try {
-        const ref = doc(db, `users/${user.uid}/playlists/${playlistId}`);
-        const clean = { id: String(songToAdd.id), name: getName(songToAdd), primaryArtists: getDesc(songToAdd), image: songToAdd.image||[], downloadUrl: songToAdd.downloadUrl||[] };
-        await updateDoc(ref, { songs: arrayUnion(clean) });
-        toast.success("Added to Playlist"); setShowAddToPlaylistModal(false);
-    } catch(e) { toast.error("Failed"); }
+    const newPlaylists = userPlaylists.map(pl => {
+        if(pl.id === playlistId) {
+            return { ...pl, songs: [...pl.songs, songToAdd] };
+        }
+        return pl;
+    });
+    setUserPlaylists(newPlaylists);
+    toast.success("Added to Playlist"); setShowAddToPlaylistModal(false);
   };
 
   // --- NAVIGATION ---
@@ -332,45 +278,11 @@ function App() {
     }
   };
 
-  // --- AUTH & EFFECTS ---
+  // --- EFFECTS ---
   useEffect(() => {
-    fetchHome(); // ALWAYS FETCH HOME DATA
-    
-    // Safety check: If Firebase not loaded, keep demo user
-    if (!auth) return;
-
-    const unsub = onAuthStateChanged(auth, async (u) => {
-        if(u) {
-            setUser(u); setView('app');
-            try {
-                const userSnap = await getDoc(doc(db, "users", u.uid));
-                if(userSnap.exists()) {
-                    const data = userSnap.data();
-                    setLikedSongs(data.likedSongs || []);
-                    setHistory(data.history || []);
-                }
-                else await setDoc(doc(db, "users", u.uid), { email: u.email, likedSongs: [], history: [] });
-                
-                const q = query(collection(db, `users/${u.uid}/playlists`));
-                onSnapshot(q, (snapshot) => setUserPlaylists(snapshot.docs.map(d => ({id: d.id, ...d.data()}))));
-            } catch {}
-        } 
-        // Note: We do NOT set user to null on else, to keep the Demo mode active for you.
-    });
-    return () => unsub();
+    // Initial Load
+    fetchHome();
   }, []);
-
-  const handleAuth = async () => {
-    if (!auth) { toast.error("Firebase not configured"); return; }
-    const toastId = toast.loading("Authenticating...");
-    try {
-        if(authMode==='signup') {
-            const c = await createUserWithEmailAndPassword(auth, authInput.email, authInput.password);
-            await setDoc(doc(db, "users", c.user.uid), { email: authInput.email, likedSongs: [], history: [] });
-        } else { await signInWithEmailAndPassword(auth, authInput.email, authInput.password); }
-        toast.success("Welcome!", { id: toastId });
-    } catch(e) { toast.error(e.message, { id: toastId }); }
-  };
 
   useEffect(() => {
     const a = audioRef.current;
@@ -390,43 +302,12 @@ function App() {
     const handleKey = (e) => {
         if(e.target.tagName==='INPUT') return;
         if(e.code==='Space') { e.preventDefault(); togglePlay(); }
-        if(e.code==='ArrowRight') audioRef.current.currentTime += 5;
-        if(e.code==='ArrowLeft') audioRef.current.currentTime -= 5;
     };
     window.addEventListener('keydown', handleKey);
     return () => window.removeEventListener('keydown', handleKey);
   }, [isPlaying]);
 
-  useEffect(() => {
-    if ('mediaSession' in navigator && currentSong) {
-      navigator.mediaSession.metadata = new MediaMetadata({
-        title: getName(currentSong), artist: getDesc(currentSong),
-        artwork: [{ src: getImg(currentSong.image), sizes: '512x512', type: 'image/jpeg' }]
-      });
-      navigator.mediaSession.setActionHandler('play', togglePlay);
-      navigator.mediaSession.setActionHandler('pause', togglePlay);
-      navigator.mediaSession.setActionHandler('previoustrack', () => playSong(queue, qIndex - 1));
-      navigator.mediaSession.setActionHandler('nexttrack', () => playSong(queue, qIndex + 1));
-    }
-  }, [currentSong, isPlaying, queue, qIndex]);
-
-  useEffect(() => { document.title = currentSong ? `${getName(currentSong)} • Aura` : "Aura Music"; }, [currentSong]);
-
-  if(view==='loading') return <div style={{height:'100vh',background:'black',display:'flex',justifyContent:'center',alignItems:'center',color:'white'}}>Loading...</div>;
-
-  if(view==='auth') return (
-    <div className="auth-container">
-        <Toaster/>
-        <div className="auth-box">
-            <h1 className="brand">Aura.</h1>
-            <input className="auth-input" placeholder="Email" onChange={e=>setAuthInput({...authInput,email:e.target.value})}/>
-            <input className="auth-input" type="password" placeholder="Password" onChange={e=>setAuthInput({...authInput,password:e.target.value})}/>
-            <button className="auth-btn" onClick={handleAuth}>{authMode==='login'?'Sign In':'Sign Up'}</button>
-            <p style={{color:'#666', marginTop:20, cursor:'pointer'}} onClick={()=>setAuthMode(authMode==='login'?'signup':'login')}>{authMode==='login'?'Create Account':'Login'}</p>
-        </div>
-    </div>
-  );
-
+  // --- RENDER ---
   return (
     <div className="app-layout">
         <Toaster position="top-center" toastOptions={{style:{background:'#333', color:'#fff'}}}/>
@@ -495,7 +376,7 @@ function App() {
             <div className="nav-links">
                 <div className={`nav-item ${tab==='home'?'active':''}`} onClick={()=>setTab('home')}><Icons.Home/> Home</div>
                 <div className={`nav-item ${tab==='search'?'active':''}`} onClick={()=>setTab('search')}><Icons.Search/> Search</div>
-                <div className={`nav-item ${tab==='library'?'active':''}`} onClick={()=>setTab('library')}><Icons.Library/> Library</div>
+                <div className={`nav-item ${tab==='library'?'active':''}`} onClick={()=>setTab('library')}><Icons.Library/> Liked Songs</div>
                 <div className={`nav-item ${tab==='profile'?'active':''}`} onClick={()=>setTab('profile')}><span style={{fontSize:'1.2rem'}}>👤</span> Profile</div>
                 
                 <div className="nav-section-title">My Playlists</div>
@@ -533,8 +414,7 @@ function App() {
                                 <div className="profile-label">Profile</div>
                                 <h1 className="profile-name">{user.email.split('@')[0]}</h1>
                                 <button className="btn-logout" onClick={()=>{
-                                    if(auth) signOut(auth);
-                                    setUser(null); setView('auth'); // Manual logout
+                                    toast.success("Logged Out");
                                 }}>Logout</button>
                             </div>
                         </div>
