@@ -2,36 +2,44 @@ import React, { useState, useRef, useEffect } from 'react';
 import './App.css';
 import toast, { Toaster } from 'react-hot-toast';
 
-// --- MOCK DATA (No API/Firebase needed to see UI) ---
-const MOCK_DATA = {
-  trending: [
-    { id: '1', name: 'Starboy', primaryArtists: 'The Weeknd', image: [{url:'https://i.scdn.co/image/ab67616d0000b2734718e28d24527d9774635ded'}] },
-    { id: '2', name: 'Flowers', primaryArtists: 'Miley Cyrus', image: [{url:'https://i.scdn.co/image/ab67616d0000b273f429549123dbe8552764ba1d'}] },
-    { id: '3', name: 'As It Was', primaryArtists: 'Harry Styles', image: [{url:'https://i.scdn.co/image/ab67616d0000b273b46f74097655d7f353ca6605'}] },
-    { id: '4', name: 'Anti-Hero', primaryArtists: 'Taylor Swift', image: [{url:'https://i.scdn.co/image/ab67616d0000b273bb54dde5369e8c4b751209c7'}] },
-    { id: '5', name: 'Rich Flex', primaryArtists: 'Drake, 21 Savage', image: [{url:'https://i.scdn.co/image/ab67616d0000b27302854a7060fccc1a163160cc'}] },
-  ],
-  charts: [
-    { id: 'c1', name: 'Global Top 50', image: [{url:'https://charts-images.scdn.co/assets/locale_en/regional/weekly/region_global_default.jpg'}] },
-    { id: 'c2', name: 'Viral Hits', image: [{url:'https://i.scdn.co/image/ab67706f00000002d6d48b11fd3b11da654c3519'}] },
-  ],
-  newAlbums: [
-    { id: 'a1', name: 'Midnights', year: '2022', image: [{url:'https://i.scdn.co/image/ab67616d0000b273bb54dde5369e8c4b751209c7'}] },
-    { id: 'a2', name: 'Harrys House', year: '2022', image: [{url:'https://i.scdn.co/image/ab67616d0000b273b46f74097655d7f353ca6605'}] },
-  ]
+// --- FIREBASE (Safe Import) ---
+import { initializeApp } from "firebase/app";
+import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, onAuthStateChanged } from 'firebase/auth';
+import { getFirestore, doc, setDoc, getDoc, updateDoc, arrayUnion, arrayRemove, collection, addDoc, onSnapshot, query } from 'firebase/firestore';
+
+// 1. EMBEDDED CONFIG (Prevents "File Not Found" Crashes)
+const firebaseConfig = {
+  apiKey: "AIzaSyB_DEMO_KEY_FOR_UI_TESTING_ONLY", 
+  authDomain: "demo-project.firebaseapp.com",
+  projectId: "demo-project",
+  storageBucket: "demo-project.appspot.com",
+  messagingSenderId: "123456789",
+  appId: "1:123456789:web:abcdef123456"
 };
 
+// Initialize Firebase safely
+let auth, db;
+try {
+  const app = initializeApp(firebaseConfig);
+  auth = getAuth(app);
+  db = getFirestore(app);
+} catch (error) {
+  console.warn("Firebase offline (expected for demo):", error);
+}
+
+// --- REAL API ENDPOINT ---
+const API_BASE = "https://saavn.sumit.co/api";
+
 const MOODS = [
-  { id: 'm1', name: 'Party', color: '#e57373' },
-  { id: 'm2', name: 'Romance', color: '#f06292' },
-  { id: 'm3', name: 'Sad', color: '#ba68c8' },
-  { id: 'm4', name: 'Workout', color: '#ffb74d' },
-  { id: 'm5', name: 'Chill', color: '#4db6ac' },
-  { id: 'm6', name: 'Retro', color: '#7986cb' },
+  { id: 'm1', name: 'Party', color: '#e57373', query: 'Party Hits' },
+  { id: 'm2', name: 'Romance', color: '#f06292', query: 'Love Songs' },
+  { id: 'm3', name: 'Sad', color: '#ba68c8', query: 'Sad Songs' },
+  { id: 'm4', name: 'Workout', color: '#ffb74d', query: 'Gym Motivation' },
+  { id: 'm5', name: 'Chill', color: '#4db6ac', query: 'Chill Lo-Fi' },
+  { id: 'm6', name: 'Retro', color: '#7986cb', query: 'Retro Classics' },
 ];
 
-// --- ICONS ---
-const Icons = {
+const ICONS = {
   Home: () => <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/></svg>,
   Search: () => <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>,
   Library: () => <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>,
@@ -51,16 +59,23 @@ const Icons = {
 };
 
 function App() {
-  const [view, setView] = useState('app'); // Skip Auth for now
+  const [view, setView] = useState('app');
   const [tab, setTab] = useState('home');
-  // FAKE USER to prevent crashes
-  const [user, setUser] = useState({ email: 'user@aura.music', uid: 'demo-123' });
+  // FORCE LOGIN (Bypass)
+  const [user, setUser] = useState({ email: 'demo@aura.music', uid: 'demo-user-123' });
   
-  // Data State
-  const [homeData, setHomeData] = useState(MOCK_DATA);
+  // Data
+  const [homeData, setHomeData] = useState({ 
+    trending: [], charts: [], newAlbums: [], radio: [], topArtists: [], editorial: [], fresh: [], nineties: [], hindiPop: [] 
+  });
   const [resSongs, setResSongs] = useState([]);
-  const [history, setHistory] = useState(MOCK_DATA.trending);
-  const [likedSongs, setLikedSongs] = useState(MOCK_DATA.trending.slice(0,2));
+  const [resAlbums, setResAlbums] = useState([]);
+  const [resArtists, setResArtists] = useState([]);
+  const [resPlaylists, setResPlaylists] = useState([]);
+  const [moodPlaylists, setMoodPlaylists] = useState([]);
+  
+  const [history, setHistory] = useState([]);
+  const [likedSongs, setLikedSongs] = useState([]);
   const [userPlaylists, setUserPlaylists] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
   
@@ -74,6 +89,7 @@ function App() {
   const [showAddToPlaylistModal, setShowAddToPlaylistModal] = useState(false);
   const [newPlaylistName, setNewPlaylistName] = useState("");
   const [songToAdd, setSongToAdd] = useState(null);
+  const [loading, setLoading] = useState(false);
   
   // Player
   const audioRef = useRef(new Audio());
@@ -89,68 +105,154 @@ function App() {
   const [repeatMode, setRepeatMode] = useState('none'); 
 
   // Helpers
-  const getImg = (i) => { if(Array.isArray(i)) return i[i.length-1]?.url || i[0]?.url; return i || "https://via.placeholder.com/150"; }
+  const getImg = (i) => { 
+    if(!i) return "https://via.placeholder.com/150";
+    if(Array.isArray(i)) return i[i.length-1]?.url || i[0]?.url; 
+    return i; 
+  };
   const getName = (i) => i?.name || i?.title || "Unknown";
   const getDesc = (i) => i?.primaryArtists || i?.description || "";
   const isLiked = (id) => likedSongs.some(s => String(s.id) === String(id));
   const formatTime = (s) => { if(isNaN(s)) return "0:00"; const m=Math.floor(s/60), sc=Math.floor(s%60); return `${m}:${sc<10?'0'+sc:sc}`; };
 
-  // --- MOCK DATA FETCHING (Replaces API for safety) ---
+  // --- 1. DATA FETCHING (REAL API) ---
+  const fetchHome = async () => {
+    setLoading(true);
+    try {
+      const results = await Promise.all([
+        fetch(`${API_BASE}/search/songs?query=Top 50&limit=15`).then(r=>r.json()).catch(()=>({})),
+        fetch(`${API_BASE}/search/playlists?query=Top Charts&limit=15`).then(r=>r.json()).catch(()=>({})),
+        fetch(`${API_BASE}/search/albums?query=New&limit=15`).then(r=>r.json()).catch(()=>({})),
+        fetch(`${API_BASE}/search/playlists?query=Editors Pick&limit=15`).then(r=>r.json()).catch(()=>({})),
+        fetch(`${API_BASE}/search/artists?query=Best&limit=15`).then(r=>r.json()).catch(()=>({})), 
+        fetch(`${API_BASE}/search/artists?query=Top Artists&limit=15`).then(r=>r.json()).catch(()=>({})),
+        fetch(`${API_BASE}/search/playlists?query=Love&limit=15`).then(r=>r.json()).catch(()=>({})),
+        fetch(`${API_BASE}/search/playlists?query=Fresh Hits&limit=15`).then(r=>r.json()).catch(()=>({})),
+        fetch(`${API_BASE}/search/playlists?query=90s Bollywood&limit=15`).then(r=>r.json()).catch(()=>({})),
+        fetch(`${API_BASE}/search/albums?query=New Hindi Pop&limit=15`).then(r=>r.json()).catch(()=>({}))
+      ]);
+
+      setHomeData({ 
+        trending: results[0]?.data?.results || [], 
+        charts: results[1]?.data?.results || [], 
+        newAlbums: results[2]?.data?.results || [], 
+        editorial: results[3]?.data?.results || [],
+        radio: results[4]?.data?.results || [],
+        topArtists: results[5]?.data?.results || [], 
+        love: results[6]?.data?.results || [],
+        fresh: results[7]?.data?.results || [],
+        nineties: results[8]?.data?.results || [],
+        hindiPop: results[9]?.data?.results || []
+      });
+    } catch(e) { console.error("Home Error", e); } 
+    finally { setLoading(false); }
+  };
+
   const doSearch = async () => {
     if(!searchQuery) return;
-    setTab('search');
-    // Simulate API delay
-    toast.success("Searching...");
-    setTimeout(() => {
-        // Return mock results based on query just to show UI
-        setResSongs(MOCK_DATA.trending);
-    }, 500);
+    setLoading(true); setTab('search');
+    try {
+      const [s, a, ar, p] = await Promise.all([
+        fetch(`${API_BASE}/search/songs?query=${encodeURIComponent(searchQuery)}`).then(r=>r.json()),
+        fetch(`${API_BASE}/search/albums?query=${encodeURIComponent(searchQuery)}`).then(r=>r.json()),
+        fetch(`${API_BASE}/search/artists?query=${encodeURIComponent(searchQuery)}`).then(r=>r.json()),
+        fetch(`${API_BASE}/search/playlists?query=${encodeURIComponent(searchQuery)}`).then(r=>r.json())
+      ]);
+      setResSongs(s?.data?.results || []); setResAlbums(a?.data?.results || []); setResArtists(ar?.data?.results || []); setResPlaylists(p?.data?.results || []);
+    } catch(e) { console.error(e); } finally { setLoading(false); }
   };
 
-  const fetchLyrics = () => {
-    if(!currentSong) return;
-    setLyricsText("Lyrics feature is in demo mode.\n\nImagine real lyrics here for " + currentSong.name);
-    setShowLyrics(true);
-  };
-
-  // --- PLAYER LOGIC ---
+  // --- 2. PLAYER LOGIC (REAL AUDIO) ---
   const playSong = (list, idx) => {
     if(!list || !list[idx]) return;
     setQueue(list); setQIndex(idx);
     const s = list[idx];
     setCurrentSong(s);
     
-    // Simulating Play without Real Audio URL to avoid errors
-    setIsPlaying(true);
-    setDuration(200); // Fake duration
-    toast.success(`Playing: ${getName(s)}`);
+    // History
+    setHistory(prev => [s, ...prev.filter(h => h.id !== s.id)].slice(0, 20));
+
+    // Find Audio URL
+    const urlObj = s.downloadUrl?.find(u => u.quality === quality);
+    const url = urlObj ? urlObj.url : (s.downloadUrl?.[s.downloadUrl.length-1]?.url || s.downloadUrl?.[0]?.url);
+
+    if(url) {
+        if(audioRef.current.src !== url) {
+            audioRef.current.src = url;
+            audioRef.current.volume = volume;
+            audioRef.current.play().catch(e => console.error("Playback failed", e));
+            setIsPlaying(true);
+        } else { audioRef.current.play(); setIsPlaying(true); }
+    } else {
+        toast.error("Audio unavailable");
+    }
   };
 
-  const togglePlay = () => setIsPlaying(!isPlaying);
+  const handleQualityChange = (newQ) => {
+    setQuality(newQ);
+    if(currentSong && isPlaying) {
+        playSong(queue, qIndex); 
+        toast.success(`Quality set to ${newQ}`);
+    }
+  };
+
+  const togglePlay = () => {
+    if(audioRef.current.paused) { audioRef.current.play(); setIsPlaying(true); } 
+    else { audioRef.current.pause(); setIsPlaying(false); }
+  };
 
   const handleSeek = (e) => {
     const w = e.currentTarget.clientWidth;
     const x = e.nativeEvent.offsetX;
     const seekTo = (x / w) * duration;
+    audioRef.current.currentTime = seekTo;
     setProgress(seekTo);
   };
 
-  const toggleShuffle = () => { setIsShuffle(!isShuffle); toast(!isShuffle ? 'Shuffle On' : 'Shuffle Off'); };
-  const toggleRepeat = () => { toast('Repeat All'); };
-
-  const removeFromQueue = (idx) => {
-    const newQueue = queue.filter((_, i) => i !== idx);
-    setQueue(newQueue);
+  // --- 3. UI INTERACTIONS ---
+  const handleCardClick = async (item, type) => {
+    if (type === 'song') { playSong([item], 0); }
+    else if (type === 'playlist_custom') { setSelectedItem(item); setTab('details'); setDetailsSongs(item.songs || []); }
+    else if (type === 'mood') {
+        setLoading(true); setTab('mood'); setSelectedItem(item);
+        try {
+            const res = await fetch(`${API_BASE}/search/playlists?query=${encodeURIComponent(item.query)}`).then(r=>r.json());
+            setMoodPlaylists(res?.data?.results || []);
+        } catch(e) { console.error(e); } finally { setLoading(false); }
+    }
+    else {
+      setSelectedItem(item); setTab('details'); setLoading(true); setDetailsSongs([]);
+      try {
+        let endpoint = type === 'album' ? `${API_BASE}/albums?id=${item.id}` : type === 'artist' ? `${API_BASE}/artists?id=${item.id}` : `${API_BASE}/playlists?id=${item.id}`;
+        const res = await fetch(endpoint).then(r=>r.json());
+        if(res.success) setDetailsSongs(res.data.songs || res.data.topSongs || []);
+      } catch(e) { console.error(e); } finally { setLoading(false); }
+    }
   };
 
-  // --- PLAYLIST & LIKE ---
+  const fetchLyrics = async () => {
+    if(!currentSong) return;
+    if(showLyrics) { setShowLyrics(false); return; }
+    const toastId = toast.loading("Fetching lyrics...");
+    try {
+        const res = await fetch(`${API_BASE}/lyrics?id=${currentSong.id}`);
+        const data = await res.json();
+        if(data.success && data.data?.lyrics) {
+            setLyricsText(data.data.lyrics.replace(/<br>/g, "\n"));
+            setShowLyrics(true);
+            toast.success("Lyrics loaded", { id: toastId });
+        } else { toast.error("Lyrics not available", { id: toastId }); }
+    } catch(e) { toast.error("Error loading lyrics", { id: toastId }); }
+  };
+
   const toggleLike = (item) => {
     const liked = isLiked(item.id);
     if(liked) {
         setLikedSongs(likedSongs.filter(s=>String(s.id)!==String(item.id)));
         toast("Removed from Library");
     } else {
-        setLikedSongs([...likedSongs, item]);
+        const clean = { id: String(item.id), name: getName(item), primaryArtists: getDesc(item), image: item.image||[], downloadUrl: item.downloadUrl||[], duration: item.duration||0 };
+        setLikedSongs([...likedSongs, clean]);
         toast.success("Added to Library");
     }
   };
@@ -161,29 +263,28 @@ function App() {
     setNewPlaylistName(""); setShowPlaylistModal(false); toast.success("Playlist Created");
   };
 
-  // --- NAVIGATION ---
-  const handleCardClick = (item, type) => {
-    if (type === 'song') { playSong([item], 0); }
-    else if (type === 'playlist_custom') { setSelectedItem(item); setTab('details'); setDetailsSongs(item.songs || []); }
-    else if (type === 'mood') {
-        toast('Mood Selected: ' + item.name);
-    }
-    else {
-      setSelectedItem(item); setTab('details'); 
-      setDetailsSongs(MOCK_DATA.trending); // Show trending as details for demo
-    }
+  const addToPlaylist = (playlistId) => {
+    if(!songToAdd) return;
+    setUserPlaylists(userPlaylists.map(pl => pl.id === playlistId ? { ...pl, songs: [...pl.songs, songToAdd] } : pl));
+    toast.success("Added to Playlist"); setShowAddToPlaylistModal(false);
   };
 
-  // --- MOCK AUDIO TICKER ---
+  // --- EFFECTS ---
+  useEffect(() => { fetchHome(); }, []);
+
   useEffect(() => {
-    let interval;
-    if(isPlaying) {
-        interval = setInterval(() => {
-            setProgress(p => (p >= duration ? 0 : p + 1));
-        }, 1000);
-    }
-    return () => clearInterval(interval);
-  }, [isPlaying, duration]);
+    const a = audioRef.current;
+    const updateTime = () => { setProgress(a.currentTime); setDuration(a.duration||0); };
+    const handleEnd = () => {
+      if(repeatMode === 'one') { a.currentTime = 0; a.play(); }
+      else if(isShuffle) { playSong(queue, Math.floor(Math.random() * queue.length)); }
+      else if(qIndex < queue.length - 1) { playSong(queue, qIndex + 1); }
+      else if(repeatMode === 'all') { playSong(queue, 0); }
+      else { setIsPlaying(false); }
+    };
+    a.addEventListener('timeupdate', updateTime); a.addEventListener('ended', handleEnd);
+    return () => { a.removeEventListener('timeupdate', updateTime); a.removeEventListener('ended', handleEnd); };
+  }, [queue, qIndex, repeatMode, isShuffle]);
 
   // --- RENDER ---
   return (
@@ -192,7 +293,7 @@ function App() {
 
         {showLyrics && (
             <div className="lyrics-overlay">
-                <button className="lyrics-close" style={{position:'absolute', top:20, right:20, background:'none', border:'none', color:'white', fontSize:'2rem'}} onClick={()=>setShowLyrics(false)}>✕</button>
+                <button className="lyrics-close" onClick={()=>setShowLyrics(false)}>✕</button>
                 <div className="lyrics-content">{lyricsText}</div>
             </div>
         )}
@@ -231,13 +332,30 @@ function App() {
             </div>
         )}
 
+        {showAddToPlaylistModal && (
+            <div className="modal-overlay">
+                <div className="modal-box">
+                    <h2>Add to Playlist</h2>
+                    <div className="queue-list" style={{maxHeight:300}}>
+                        {userPlaylists.map(pl => (
+                            <div key={pl.id} className="queue-item" onClick={()=>addToPlaylist(pl.id)}>
+                                <div style={{width:40, height:40, background:'#333', borderRadius:8, display:'flex', alignItems:'center', justifyContent:'center'}}>🎵</div>
+                                <div>{pl.name}</div>
+                            </div>
+                        ))}
+                    </div>
+                    <button className="btn-cancel" style={{marginTop:20, width:'100%'}} onClick={()=>setShowAddToPlaylistModal(false)}>Cancel</button>
+                </div>
+            </div>
+        )}
+
         {/* SIDEBAR */}
         <div className="sidebar">
             <div className="brand">Aura.</div>
             <div className="nav-links">
                 <div className={`nav-item ${tab==='home'?'active':''}`} onClick={()=>setTab('home')}><Icons.Home/> Home</div>
                 <div className={`nav-item ${tab==='search'?'active':''}`} onClick={()=>setTab('search')}><Icons.Search/> Search</div>
-                <div className={`nav-item ${tab==='library'?'active':''}`} onClick={()=>setTab('library')}><Icons.Library/> Library</div>
+                <div className={`nav-item ${tab==='library'?'active':''}`} onClick={()=>setTab('library')}><Icons.Library/> Liked Songs</div>
                 <div className={`nav-item ${tab==='profile'?'active':''}`} onClick={()=>setTab('profile')}><span style={{fontSize:'1.2rem'}}>👤</span> Profile</div>
                 
                 <div className="nav-section-title">My Playlists</div>
@@ -273,7 +391,7 @@ function App() {
                             <div className="profile-info">
                                 <div className="profile-label">Profile</div>
                                 <h1 className="profile-name">{user.email.split('@')[0]}</h1>
-                                <button className="btn-logout" onClick={()=>{ toast.success("Logged Out (Demo)"); }}>Logout</button>
+                                <button className="btn-logout" onClick={()=>{ toast.success("You are in Demo Mode"); }}>Logout</button>
                             </div>
                         </div>
                         <div className="section-header">Your Library ({likedSongs.length})</div>
@@ -318,7 +436,7 @@ function App() {
                                         <button className={`icon-action ${isLiked(s.id)?'liked':''}`} onClick={()=>toggleLike(s)}><Icons.Heart/></button>
                                         <button className="icon-action" onClick={()=>{setSongToAdd(s); setShowAddToPlaylistModal(true);}}><Icons.Plus/></button>
                                     </div>
-                                    <div className="track-dur">2:30</div>
+                                    <div className="track-dur">{Math.floor(s.duration/60)}:{String(s.duration%60).padStart(2,'0')}</div>
                                 </div>
                             ))}
                         </div>
@@ -328,13 +446,84 @@ function App() {
                 {/* SEARCH RESULTS */}
                 {tab === 'search' && (
                     <div className="section">
-                        <div className="section-header">Results</div>
+                        {resSongs.length > 0 && (
+                            <>
+                                <div className="section-header">Songs</div>
+                                <div className="grid">
+                                    {resSongs.map(s => (
+                                        <div key={s.id} className="card" onClick={()=>handleCardClick(s, 'song')}>
+                                            <img src={getImg(s.image)} alt=""/>
+                                            <h3>{getName(s)}</h3>
+                                            <p>{getDesc(s)}</p>
+                                            <div className="card-actions">
+                                                <button className={`btn-card-action ${isLiked(s.id)?'liked':''}`} onClick={(e)=>{e.stopPropagation(); toggleLike(s)}}><Icons.Heart/></button>
+                                                <button className="btn-card-action" onClick={(e)=>{e.stopPropagation(); setSongToAdd(s); setShowAddToPlaylistModal(true);}}><Icons.Plus/></button>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </>
+                        )}
+                        {resAlbums.length > 0 && (
+                            <>
+                                <div className="section-header" style={{marginTop:40}}>Albums</div>
+                                <div className="horizontal-scroll">
+                                    {resAlbums.map(a => (
+                                        <div key={a.id} className="card" onClick={()=>handleCardClick(a, 'album')}>
+                                            <img src={getImg(a.image)} alt=""/>
+                                            <h3>{getName(a)}</h3>
+                                            <p>{a.year}</p>
+                                        </div>
+                                    ))}
+                                </div>
+                            </>
+                        )}
+                        {resArtists.length > 0 && (
+                            <>
+                                <div className="section-header" style={{marginTop:40}}>Artists</div>
+                                <div className="horizontal-scroll">
+                                    {resArtists.map(a => (
+                                        <div key={a.id} className="card" onClick={()=>handleCardClick(a, 'artist')}>
+                                            <img src={getImg(a.image)} alt="" style={{borderRadius:'50%'}}/>
+                                            <h3 style={{textAlign:'center'}}>{getName(a)}</h3>
+                                        </div>
+                                    ))}
+                                </div>
+                            </>
+                        )}
+                        {resPlaylists.length > 0 && (
+                            <>
+                                <div className="section-header" style={{marginTop:40}}>Playlists</div>
+                                <div className="horizontal-scroll">
+                                    {resPlaylists.map(p => (
+                                        <div key={p.id} className="card" onClick={()=>handleCardClick(p, 'playlist')}>
+                                            <img src={getImg(p.image)} alt=""/>
+                                            <h3>{getName(p)}</h3>
+                                            <p>{p.language}</p>
+                                        </div>
+                                    ))}
+                                </div>
+                            </>
+                        )}
+                    </div>
+                )}
+
+                {/* MOOD VIEW */}
+                {tab === 'mood' && selectedItem && (
+                    <div className="section">
+                        <button className="btn-back" onClick={()=>setTab('home')} style={{marginBottom:30}}>
+                            <Icons.Back /> Home
+                        </button>
+                        <div className="details-header" style={{background: selectedItem.color, borderRadius:'24px', padding:'40px', marginBottom:'40px'}}>
+                            <h1 style={{fontSize:'3rem'}}>{selectedItem.name} Mix</h1>
+                            <p>Curated Playlists for your mood</p>
+                        </div>
                         <div className="grid">
-                            {resSongs.map(s => (
-                                <div key={s.id} className="card" onClick={()=>playSong(resSongs, resSongs.indexOf(s))}>
-                                    <img src={getImg(s.image)} alt=""/>
-                                    <h3>{getName(s)}</h3>
-                                    <p>{getDesc(s)}</p>
+                            {moodPlaylists.map(p => (
+                                <div key={p.id} className="card" onClick={()=>handleCardClick(p, 'playlist')}>
+                                    <img src={getImg(p.image)} alt=""/>
+                                    <h3>{getName(p)}</h3>
+                                    <p>{p.language}</p>
                                 </div>
                             ))}
                         </div>
@@ -349,7 +538,22 @@ function App() {
                             <p>Discover new music, fresh albums, and curated playlists.</p>
                         </div>
 
-                        {/* Moods */}
+                        {/* 1. History */}
+                        {history.length > 0 && (
+                            <div className="section">
+                                <div className="section-header">Recently Played</div>
+                                <div className="horizontal-scroll">
+                                    {history.map(s => (
+                                        <div key={s.id} className="card" onClick={()=>playSong(history, history.indexOf(s))}>
+                                            <img src={getImg(s.image)} alt=""/>
+                                            <h3>{getName(s)}</h3>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+
+                        {/* 2. Moods */}
                         <div className="section">
                             <div className="section-header">Moods</div>
                             <div className="horizontal-scroll">
@@ -361,24 +565,25 @@ function App() {
                             </div>
                         </div>
 
-                        {/* Trending */}
+                        {/* 3. Trending */}
                         <div className="section">
                             <div className="section-header">Trending Now</div>
                             <div className="horizontal-scroll">
                                 {homeData.trending.map(s => (
-                                    <div key={s.id} className="card" onClick={()=>playSong(homeData.trending, homeData.trending.indexOf(s))}>
+                                    <div key={s.id} className="card" onClick={()=>handleCardClick(s, 'song')}>
                                         <img src={getImg(s.image)} alt=""/>
                                         <h3>{getName(s)}</h3>
                                         <p>{getDesc(s)}</p>
                                         <div className="card-actions">
                                             <button className={`btn-card-action ${isLiked(s.id)?'liked':''}`} onClick={(e)=>{e.stopPropagation(); toggleLike(s)}}><Icons.Heart/></button>
+                                            <button className="btn-card-action" onClick={(e)=>{e.stopPropagation(); setSongToAdd(s); setShowAddToPlaylistModal(true);}}><Icons.Plus/></button>
                                         </div>
                                     </div>
                                 ))}
                             </div>
                         </div>
 
-                        {/* Top Charts */}
+                        {/* 4. Top Charts */}
                         <div className="section">
                             <div className="section-header">Top Charts</div>
                             <div className="horizontal-scroll">
@@ -386,12 +591,115 @@ function App() {
                                     <div key={p.id} className="card" onClick={()=>handleCardClick(p, 'playlist')}>
                                         <img src={getImg(p.image)} alt=""/>
                                         <h3>{getName(p)}</h3>
-                                        <p>Chart</p>
+                                        <p>{p.language}</p>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+
+                        {/* 5. New Albums */}
+                        <div className="section">
+                            <div className="section-header">New Albums</div>
+                            <div className="horizontal-scroll">
+                                {homeData.newAlbums.map(a => (
+                                    <div key={a.id} className="card" onClick={()=>handleCardClick(a, 'album')}>
+                                        <img src={getImg(a.image)} alt=""/>
+                                        <h3>{getName(a)}</h3>
+                                        <p>{a.year}</p>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+
+                        {/* 6. Radio (Artists) */}
+                        <div className="section">
+                            <div className="section-header">Radio Stations</div>
+                            <div className="horizontal-scroll">
+                                {homeData.radio.map(a => (
+                                    <div key={a.id} className="card" onClick={()=>handleCardClick(a, 'artist')}>
+                                        <img src={getImg(a.image)} alt="" style={{borderRadius:'50%'}}/>
+                                        <h3 style={{textAlign:'center'}}>{getName(a)}</h3>
+                                        <p style={{textAlign:'center', fontSize:'0.8rem'}}>Artist Radio</p>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+
+                        {/* 7. Editorial */}
+                        <div className="section">
+                            <div className="section-header">Editorial Picks</div>
+                            <div className="horizontal-scroll">
+                                {homeData.editorial.map(p => (
+                                    <div key={p.id} className="card" onClick={()=>handleCardClick(p, 'playlist')}>
+                                        <img src={getImg(p.image)} alt=""/>
+                                        <h3>{getName(p)}</h3>
+                                        <p>Featured</p>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+
+                        {/* 8. Fresh Hits */}
+                        <div className="section">
+                            <div className="section-header">Fresh Hits</div>
+                            <div className="horizontal-scroll">
+                                {homeData.fresh.map(p => (
+                                    <div key={p.id} className="card" onClick={()=>handleCardClick(p, 'playlist')}>
+                                        <img src={getImg(p.image)} alt=""/>
+                                        <h3>{getName(p)}</h3>
+                                        <p>New Music</p>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+
+                        {/* 9. 90s Magic */}
+                        <div className="section">
+                            <div className="section-header">Best of 90s</div>
+                            <div className="horizontal-scroll">
+                                {homeData.nineties.map(p => (
+                                    <div key={p.id} className="card" onClick={()=>handleCardClick(p, 'playlist')}>
+                                        <img src={getImg(p.image)} alt=""/>
+                                        <h3>{getName(p)}</h3>
+                                        <p>Nostalgia</p>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+
+                        {/* 10. Hindi Pop */}
+                        <div className="section">
+                            <div className="section-header">New Hindi Pop</div>
+                            <div className="horizontal-scroll">
+                                {homeData.hindiPop.map(a => (
+                                    <div key={a.id} className="card" onClick={()=>handleCardClick(a, 'album')}>
+                                        <img src={getImg(a.image)} alt=""/>
+                                        <h3>{getName(a)}</h3>
+                                        <p>{a.year}</p>
                                     </div>
                                 ))}
                             </div>
                         </div>
                     </>
+                )}
+
+                {/* LIBRARY */}
+                {tab === 'library' && (
+                    <div className="section">
+                        <div className="section-header">Liked Songs</div>
+                        <div className="grid">
+                            {likedSongs.map((s, i) => (
+                                <div key={s.id} className="card" onClick={()=>playSong(likedSongs, i)}>
+                                    <img src={getImg(s.image)} alt=""/>
+                                    <h3>{getName(s)}</h3>
+                                    <p>{getDesc(s)}</p>
+                                    <div className="card-actions" style={{opacity:1}}>
+                                        <button className="btn-card-action liked" onClick={(e)=>{e.stopPropagation(); toggleLike(s)}}><Icons.Heart/></button>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
                 )}
             </div>
         </div>
@@ -400,6 +708,7 @@ function App() {
         <div className={`player-bar ${currentSong ? 'visible' : ''}`} style={{transform: currentSong ? 'translateY(0)' : 'translateY(100%)', transition:'transform 0.3s'}}>
             {currentSong && (
                 <>
+                    {/* Mobile Progress Bar (Visual only, top of player) */}
                     <div className="mobile-progress-bar" style={{width: `${(progress/duration)*100}%`, display: 'none'}}></div> 
                     
                     <div className="p-track">
@@ -408,6 +717,7 @@ function App() {
                             <h4 style={{fontSize:'0.9rem', color:'white', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis'}}>{getName(currentSong)}</h4>
                             <p style={{fontSize:'0.8rem', color:'#aaa', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis'}}>{getDesc(currentSong)}</p>
                         </div>
+                        {isPlaying && <div className="visualizer"><div className="bar"/><div className="bar"/><div className="bar"/><div className="bar"/></div>}
                     </div>
                     <div className="p-center">
                         <div className="p-controls">
@@ -419,6 +729,7 @@ function App() {
                                 {repeatMode==='one' ? <Icons.RepeatOne/> : <Icons.Repeat/>}
                             </button>
                         </div>
+                        {/* TIMELINE */}
                         <div className="progress-container">
                             <span>{formatTime(progress)}</span>
                             <div className="progress-rail" onClick={handleSeek}>
@@ -430,8 +741,15 @@ function App() {
                     <div className="p-right">
                         <button className={`btn-icon ${showLyrics?'active':''}`} onClick={fetchLyrics}><Icons.Mic/></button>
                         <button className={`btn-icon ${showQueue?'active':''}`} onClick={()=>setShowQueue(!showQueue)}><Icons.List/></button>
+                        <input type="range" className="volume-slider" min="0" max="1" step="0.1" value={volume} onChange={e=>{setVolume(e.target.value); audioRef.current.volume=e.target.value}}/>
+                        <select className="quality-select" value={quality} onChange={e=>handleQualityChange(e.target.value)}>
+                            <option value="320kbps">320kbps</option>
+                            <option value="160kbps">160kbps</option>
+                            <option value="96kbps">96kbps</option>
+                        </select>
                     </div>
 
+                    {/* Mobile Controls (Only visible on small screens via CSS) */}
                     <div className="mobile-controls" style={{display:'none'}}> 
                        <button className="btn-play-mobile" onClick={togglePlay}>{isPlaying ? <Icons.Pause/> : <Icons.Play/>}</button>
                     </div>
@@ -439,7 +757,7 @@ function App() {
             )}
         </div>
 
-        {/* BOTTOM NAV */}
+        {/* BOTTOM NAV (Mobile) */}
         <div className="bottom-nav">
             <div className={`nav-tab ${tab==='home'?'active':''}`} onClick={()=>setTab('home')}><Icons.Home/> Home</div>
             <div className={`nav-tab ${tab==='search'?'active':''}`} onClick={()=>setTab('search')}><Icons.Search/> Search</div>
