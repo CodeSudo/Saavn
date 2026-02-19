@@ -45,6 +45,9 @@ function App() {
   const [loading, setLoading] = useState(false);
   const [user, setUser] = useState(null);
   
+  // --- NEW: Audio Source Tracker ---
+  const [source, setSource] = useState('saavn');
+  
   // Data
   const [likedSongs, setLikedSongs] = useState([]);
   const [userPlaylists, setUserPlaylists] = useState([]);
@@ -148,18 +151,51 @@ function App() {
     finally { setLoading(false); }
   };
 
+  // --- NEW: MULTI-SOURCE SEARCH ENGINE ---
   const doSearch = async () => {
     if(!searchQuery) return;
     setLoading(true); setTab('search');
+    
+    // Clear out previous results
+    setResSongs([]); setResAlbums([]); setResArtists([]); setResPlaylists([]);
+    
     try {
-      const [s, a, ar, p] = await Promise.all([
-        fetch(`${API_BASE}/search/songs?query=${encodeURIComponent(searchQuery)}`).then(r=>r.json()),
-        fetch(`${API_BASE}/search/albums?query=${encodeURIComponent(searchQuery)}`).then(r=>r.json()),
-        fetch(`${API_BASE}/search/artists?query=${encodeURIComponent(searchQuery)}`).then(r=>r.json()),
-        fetch(`${API_BASE}/search/playlists?query=${encodeURIComponent(searchQuery)}`).then(r=>r.json())
-      ]);
-      setResSongs(s?.data?.results || []); setResAlbums(a?.data?.results || []); setResArtists(ar?.data?.results || []); setResPlaylists(p?.data?.results || []);
-    } catch(e) { console.error(e); } finally { setLoading(false); }
+      if (source === 'saavn') {
+          // ORIGINAL SAAVN SEARCH
+          const [s, a, ar, p] = await Promise.all([
+            fetch(`${API_BASE}/search/songs?query=${encodeURIComponent(searchQuery)}`).then(r=>r.json()),
+            fetch(`${API_BASE}/search/albums?query=${encodeURIComponent(searchQuery)}`).then(r=>r.json()),
+            fetch(`${API_BASE}/search/artists?query=${encodeURIComponent(searchQuery)}`).then(r=>r.json()),
+            fetch(`${API_BASE}/search/playlists?query=${encodeURIComponent(searchQuery)}`).then(r=>r.json())
+          ]);
+          setResSongs(s?.data?.results || []); setResAlbums(a?.data?.results || []); setResArtists(ar?.data?.results || []); setResPlaylists(p?.data?.results || []);
+      
+      } else if (source === 'itunes') {
+          // APPLE MUSIC API SEARCH
+          const res = await fetch(`https://itunes.apple.com/search?term=${encodeURIComponent(searchQuery)}&entity=song&limit=25`);
+          const data = await res.json();
+          
+          // Map Apple Music data to look exactly like Saavn data so the Player understands it
+          const mappedSongs = (data.results || []).map(item => ({
+              id: String(item.trackId),
+              name: item.trackName,
+              primaryArtists: item.artistName,
+              // Upgrade Apple's 100px thumbnail to 500px HD
+              image: [{ url: item.artworkUrl100 ? item.artworkUrl100.replace('100x100bb', '500x500bb') : "" }],
+              // Assign the 30s preview URL
+              downloadUrl: [{ url: item.previewUrl, quality: '320kbps' }],
+              duration: Math.floor((item.trackTimeMillis || 0) / 1000)
+          }));
+          
+          setResSongs(mappedSongs);
+          // Note: iTunes search is configured for songs only here, so albums/artists stay empty.
+      }
+    } catch(e) { 
+        console.error(e); 
+        toast.error("Search failed");
+    } finally { 
+        setLoading(false); 
+    }
   };
 
   const fetchLyrics = async () => {
@@ -185,6 +221,7 @@ function App() {
     setCurrentSong(s);
     addToHistory(s);
     
+    // Safely find the download URL from the array we mapped
     const urlObj = s.downloadUrl?.find(u => u.quality === quality);
     const url = urlObj ? urlObj.url : (s.downloadUrl?.[s.downloadUrl.length-1]?.url || s.downloadUrl?.[0]?.url);
 
@@ -454,6 +491,7 @@ function App() {
             <div className="brand">Void.</div>
             <div className="nav-links">
                 <div className={`nav-item ${tab==='home'?'active':''}`} onClick={()=>setTab('home')}><Icons.Home/> Home</div>
+                <div className={`nav-item ${tab==='search'?'active':''}`} onClick={()=>setTab('search')}><Icons.Search/> Search</div>
                 <div className={`nav-item ${tab==='library'?'active':''}`} onClick={()=>setTab('library')}><Icons.Library/> Liked Songs</div>
                 
                 <div className="nav-section-title">My Playlists</div>
@@ -472,6 +510,18 @@ function App() {
         <div className="main-content">
             <div className="header">
                 <div className="search-box">
+                    {/* --- THE NEW SOURCE DROPDOWN --- */}
+                    <select 
+                      value={source} 
+                      onChange={(e) => setSource(e.target.value)}
+                      style={{background: 'transparent', border: 'none', color: '#d4acfb', outline: 'none', marginRight: '8px', cursor: 'pointer', fontWeight: 'bold'}}
+                    >
+                      <option value="saavn">JioSaavn</option>
+                      <option value="itunes">Apple Music</option>
+                    </select>
+                    <div style={{width: 1, height: 20, background: '#333', marginRight: 8}}></div>
+                    {/* ----------------------------- */}
+
                     <Icons.Search/>
                     <input placeholder="Search songs, artists, albums..." value={searchQuery} onChange={e=>setSearchQuery(e.target.value)} onKeyDown={e=>e.key==='Enter'&&doSearch()}/>
                 </div>
@@ -539,7 +589,7 @@ function App() {
                                 </div>
                             </>
                         )}
-                        {resAlbums.length > 0 && (
+                        {source === 'saavn' && resAlbums.length > 0 && (
                             <>
                                 <div className="section-header" style={{marginTop:40}}>Albums</div>
                                 <div className="horizontal-scroll">
@@ -553,7 +603,7 @@ function App() {
                                 </div>
                             </>
                         )}
-                        {resArtists.length > 0 && (
+                        {source === 'saavn' && resArtists.length > 0 && (
                             <>
                                 <div className="section-header" style={{marginTop:40}}>Artists</div>
                                 <div className="horizontal-scroll">
@@ -566,7 +616,7 @@ function App() {
                                 </div>
                             </>
                         )}
-                        {resPlaylists.length > 0 && (
+                        {source === 'saavn' && resPlaylists.length > 0 && (
                             <>
                                 <div className="section-header" style={{marginTop:40}}>Playlists</div>
                                 <div className="horizontal-scroll">
@@ -797,6 +847,9 @@ function App() {
         <div className={`player-bar ${currentSong ? 'visible' : ''}`} style={{transform: currentSong ? 'translateY(0)' : 'translateY(100%)', transition:'transform 0.3s'}}>
             {currentSong && (
                 <>
+                    {/* Mobile Progress Bar (Visual only, top of player) */}
+                    <div className="mobile-progress-bar" style={{width: `${(progress/duration)*100}%`, display: 'none'}}></div> 
+                    
                     <div className="p-track">
                         <img src={getImg(currentSong.image)} alt=""/>
                         <div style={{overflow: 'hidden'}}>
@@ -833,6 +886,11 @@ function App() {
                             <option value="160kbps">160kbps</option>
                             <option value="96kbps">96kbps</option>
                         </select>
+                    </div>
+
+                    {/* Mobile Controls (Only visible on small screens via CSS) */}
+                    <div className="mobile-controls" style={{display:'none'}}> 
+                       <button className="btn-play-mobile" onClick={togglePlay}>{isPlaying ? <Icons.Pause/> : <Icons.Play/>}</button>
                     </div>
                 </>
             )}
