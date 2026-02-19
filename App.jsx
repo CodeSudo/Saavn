@@ -28,7 +28,53 @@ import { auth, db } from './firebase';
 import { signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, onAuthStateChanged } from 'firebase/auth';
 import { doc, setDoc, getDoc, updateDoc, arrayUnion, arrayRemove, collection, addDoc, onSnapshot, query } from 'firebase/firestore';
 
-const API_BASE = "https://jio-codesudo.vercel.app/api";
+// --- MULTI-SOURCE API ENGINE ---
+const APIs = {
+  saavn: {
+    name: 'JioSaavn',
+    search: async (query) => {
+      const res = await fetch(`https://jio-codesudo.vercel.app/api/search/songs?query=${encodeURIComponent(query)}`);
+      const data = await res.json();
+      return (data.data?.results || []).map(item => ({
+        id: item.id,
+        name: item.name,
+        primaryArtists: item.primaryArtists,
+        image: item.image,
+        downloadUrl: item.downloadUrl,
+        duration: item.duration,
+        source: 'saavn'
+      }));
+    }
+  },
+  youtube: {
+    name: 'YouTube Music',
+    search: async (query) => {
+      // Using a public Piped instance to safely scrape YouTube Music
+      const res = await fetch(`https://pipedapi.kavin.rocks/search?q=${encodeURIComponent(query)}&filter=music_songs`);
+      const data = await res.json();
+      
+      // Filter out weird objects and map to our app's format
+      return (data.items || []).filter(item => item.type === 'stream').map(item => ({
+        id: item.url.split('?v=')[1], // Extract YouTube ID
+        name: item.title,
+        primaryArtists: item.uploaderName,
+        image: [{ url: item.thumbnail }], 
+        duration: item.duration, // Piped gives duration in exact seconds
+        source: 'youtube'
+        // downloadUrl is left blank intentionally. We fetch the live stream on-demand!
+      }));
+    },
+    // The magical function that gets the live audio stream when you hit play
+    getStreamUrl: async (videoId) => {
+      const res = await fetch(`https://pipedapi.kavin.rocks/streams/${videoId}`);
+      const data = await res.json();
+      // Find the best quality audio-only stream (m4a or webm)
+      const audioStream = data.audioStreams?.find(s => s.mimeType.includes('audio/mp4')) || 
+                          data.audioStreams?.find(s => s.mimeType.includes('audio/webm'));
+      return audioStream ? audioStream.url : null;
+    }
+  }
+};
 
 const MOODS = [
   { id: 'm1', name: 'Party', color: '#e57373', query: 'Party Hits' },
@@ -45,7 +91,7 @@ function App() {
   const [loading, setLoading] = useState(false);
   const [user, setUser] = useState(null);
   
-  // --- NEW: Audio Source Tracker ---
+  // --- Audio Source Tracker ---
   const [source, setSource] = useState('saavn');
   
   // Data
@@ -122,17 +168,18 @@ function App() {
   const fetchHome = async () => {
     setLoading(true);
     try {
+      const base = "https://jio-codesudo.vercel.app/api";
       const results = await Promise.all([
-        fetch(`${API_BASE}/search/songs?query=Top 50&limit=15`).then(r=>r.json()).catch(()=>({})),
-        fetch(`${API_BASE}/search/playlists?query=Top Charts&limit=15`).then(r=>r.json()).catch(()=>({})),
-        fetch(`${API_BASE}/search/albums?query=New&limit=15`).then(r=>r.json()).catch(()=>({})),
-        fetch(`${API_BASE}/search/playlists?query=Editors Pick&limit=15`).then(r=>r.json()).catch(()=>({})),
-        fetch(`${API_BASE}/search/artists?query=Best&limit=15`).then(r=>r.json()).catch(()=>({})), 
-        fetch(`${API_BASE}/search/artists?query=Top Artists&limit=15`).then(r=>r.json()).catch(()=>({})),
-        fetch(`${API_BASE}/search/playlists?query=Love&limit=15`).then(r=>r.json()).catch(()=>({})),
-        fetch(`${API_BASE}/search/playlists?query=Fresh Hits&limit=15`).then(r=>r.json()).catch(()=>({})),
-        fetch(`${API_BASE}/search/playlists?query=90s Bollywood&limit=15`).then(r=>r.json()).catch(()=>({})),
-        fetch(`${API_BASE}/search/albums?query=New Hindi Pop&limit=15`).then(r=>r.json()).catch(()=>({}))
+        fetch(`${base}/search/songs?query=Top 50&limit=15`).then(r=>r.json()).catch(()=>({})),
+        fetch(`${base}/search/playlists?query=Top Charts&limit=15`).then(r=>r.json()).catch(()=>({})),
+        fetch(`${base}/search/albums?query=New&limit=15`).then(r=>r.json()).catch(()=>({})),
+        fetch(`${base}/search/playlists?query=Editors Pick&limit=15`).then(r=>r.json()).catch(()=>({})),
+        fetch(`${base}/search/artists?query=Best&limit=15`).then(r=>r.json()).catch(()=>({})), 
+        fetch(`${base}/search/artists?query=Top Artists&limit=15`).then(r=>r.json()).catch(()=>({})),
+        fetch(`${base}/search/playlists?query=Love&limit=15`).then(r=>r.json()).catch(()=>({})),
+        fetch(`${base}/search/playlists?query=Fresh Hits&limit=15`).then(r=>r.json()).catch(()=>({})),
+        fetch(`${base}/search/playlists?query=90s Bollywood&limit=15`).then(r=>r.json()).catch(()=>({})),
+        fetch(`${base}/search/albums?query=New Hindi Pop&limit=15`).then(r=>r.json()).catch(()=>({}))
       ]);
 
       setHomeData({ 
@@ -151,48 +198,29 @@ function App() {
     finally { setLoading(false); }
   };
 
-  // --- NEW: MULTI-SOURCE SEARCH ENGINE ---
+  // --- MULTI-SOURCE SEARCH ENGINE ---
   const doSearch = async () => {
     if(!searchQuery) return;
     setLoading(true); setTab('search');
     
-    // Clear out previous results
     setResSongs([]); setResAlbums([]); setResArtists([]); setResPlaylists([]);
     
     try {
       if (source === 'saavn') {
-          // ORIGINAL SAAVN SEARCH
           const [s, a, ar, p] = await Promise.all([
-            fetch(`${API_BASE}/search/songs?query=${encodeURIComponent(searchQuery)}`).then(r=>r.json()),
-            fetch(`${API_BASE}/search/albums?query=${encodeURIComponent(searchQuery)}`).then(r=>r.json()),
-            fetch(`${API_BASE}/search/artists?query=${encodeURIComponent(searchQuery)}`).then(r=>r.json()),
-            fetch(`${API_BASE}/search/playlists?query=${encodeURIComponent(searchQuery)}`).then(r=>r.json())
+            fetch(`https://jio-codesudo.vercel.app/api/search/songs?query=${encodeURIComponent(searchQuery)}`).then(r=>r.json()),
+            fetch(`https://jio-codesudo.vercel.app/api/search/albums?query=${encodeURIComponent(searchQuery)}`).then(r=>r.json()),
+            fetch(`https://jio-codesudo.vercel.app/api/search/artists?query=${encodeURIComponent(searchQuery)}`).then(r=>r.json()),
+            fetch(`https://jio-codesudo.vercel.app/api/search/playlists?query=${encodeURIComponent(searchQuery)}`).then(r=>r.json())
           ]);
           setResSongs(s?.data?.results || []); setResAlbums(a?.data?.results || []); setResArtists(ar?.data?.results || []); setResPlaylists(p?.data?.results || []);
-      
-      } else if (source === 'itunes') {
-          // APPLE MUSIC API SEARCH
-          const res = await fetch(`https://itunes.apple.com/search?term=${encodeURIComponent(searchQuery)}&entity=song&limit=25`);
-          const data = await res.json();
-          
-          // Map Apple Music data to look exactly like Saavn data so the Player understands it
-          const mappedSongs = (data.results || []).map(item => ({
-              id: String(item.trackId),
-              name: item.trackName,
-              primaryArtists: item.artistName,
-              // Upgrade Apple's 100px thumbnail to 500px HD
-              image: [{ url: item.artworkUrl100 ? item.artworkUrl100.replace('100x100bb', '500x500bb') : "" }],
-              // Assign the 30s preview URL
-              downloadUrl: [{ url: item.previewUrl, quality: '320kbps' }],
-              duration: Math.floor((item.trackTimeMillis || 0) / 1000)
-          }));
-          
-          setResSongs(mappedSongs);
-          // Note: iTunes search is configured for songs only here, so albums/artists stay empty.
+      } else if (source === 'youtube') {
+          const songs = await APIs.youtube.search(searchQuery);
+          setResSongs(songs);
       }
     } catch(e) { 
         console.error(e); 
-        toast.error("Search failed");
+        toast.error(`Search on ${APIs[source].name} failed`);
     } finally { 
         setLoading(false); 
     }
@@ -200,10 +228,14 @@ function App() {
 
   const fetchLyrics = async () => {
     if(!currentSong) return;
+    if(currentSong.source && currentSong.source !== 'saavn') {
+        toast('Lyrics are only available for JioSaavn tracks');
+        return;
+    }
     if(showLyrics) { setShowLyrics(false); return; }
     const toastId = toast.loading("Fetching lyrics...");
     try {
-        const res = await fetch(`${API_BASE}/lyrics?id=${currentSong.id}`);
+        const res = await fetch(`https://jio-codesudo.vercel.app/api/lyrics?id=${currentSong.id}`);
         const data = await res.json();
         if(data.success && data.data?.lyrics) {
             setLyricsText(data.data.lyrics.replace(/<br>/g, "\n"));
@@ -213,18 +245,36 @@ function App() {
     } catch(e) { toast.error("Error loading lyrics", { id: toastId }); }
   };
 
-  // --- PLAYER LOGIC ---
-  const playSong = (list, idx) => {
+  // --- ASYNC PLAYER LOGIC (CRUCIAL FOR YOUTUBE) ---
+  const playSong = async (list, idx) => {
     if(!list || !list[idx]) return;
     setQueue(list); setQIndex(idx);
     const s = list[idx];
     setCurrentSong(s);
     addToHistory(s);
     
-    // Safely find the download URL from the array we mapped
-    const urlObj = s.downloadUrl?.find(u => u.quality === quality);
-    const url = urlObj ? urlObj.url : (s.downloadUrl?.[s.downloadUrl.length-1]?.url || s.downloadUrl?.[0]?.url);
+    let url = "";
 
+    // 1. YouTube Audio Resolution
+    if (s.source === 'youtube') {
+        const toastId = toast.loading("Loading YouTube Stream...");
+        try {
+            url = await APIs.youtube.getStreamUrl(s.id);
+            toast.dismiss(toastId);
+            if (!url) throw new Error("No stream found");
+        } catch (e) {
+            toast.dismiss(toastId);
+            toast.error("YouTube stream failed to load.");
+            return; // Stop play if youtube fails
+        }
+    } 
+    // 2. JioSaavn Audio Resolution
+    else if (s.downloadUrl && Array.isArray(s.downloadUrl)) {
+        const urlObj = s.downloadUrl.find(u => u.quality === quality);
+        url = urlObj ? urlObj.url : (s.downloadUrl[s.downloadUrl.length-1]?.url || s.downloadUrl[0]?.url);
+    }
+
+    // Play the resolved URL
     if(url) {
         if(audioRef.current.src !== url) {
             audioRef.current.src = url;
@@ -232,7 +282,9 @@ function App() {
             audioRef.current.play().catch(()=>{});
             setIsPlaying(true);
         } else { audioRef.current.play(); setIsPlaying(true); }
-    } else toast.error("Audio unavailable");
+    } else {
+        toast.error("Audio unavailable");
+    }
   };
 
   const handleQualityChange = (newQ) => {
@@ -289,7 +341,15 @@ function App() {
             toast("Removed from Library", { icon: '💔' });
         }
     } else {
-        const clean = { id: String(item.id), name: getName(item), primaryArtists: getDesc(item), image: item.image||[], downloadUrl: item.downloadUrl||[], duration: item.duration||0 };
+        const clean = { 
+            id: String(item.id), 
+            name: getName(item), 
+            primaryArtists: getDesc(item), 
+            image: item.image||[], 
+            downloadUrl: item.downloadUrl||[], 
+            duration: item.duration||0,
+            source: item.source || 'saavn'
+        };
         setLikedSongs([...likedSongs, clean]);
         await updateDoc(userRef, { likedSongs: arrayUnion(clean) });
         toast.success("Added to Library");
@@ -309,7 +369,14 @@ function App() {
     if(!songToAdd) return;
     try {
         const ref = doc(db, `users/${user.uid}/playlists/${playlistId}`);
-        const clean = { id: String(songToAdd.id), name: getName(songToAdd), primaryArtists: getDesc(songToAdd), image: songToAdd.image||[], downloadUrl: songToAdd.downloadUrl||[] };
+        const clean = { 
+            id: String(songToAdd.id), 
+            name: getName(songToAdd), 
+            primaryArtists: getDesc(songToAdd), 
+            image: songToAdd.image||[], 
+            downloadUrl: songToAdd.downloadUrl||[],
+            source: songToAdd.source || 'saavn' 
+        };
         await updateDoc(ref, { songs: arrayUnion(clean) });
         toast.success("Added to Playlist"); setShowAddToPlaylistModal(false);
     } catch(e) { toast.error("Failed"); }
@@ -322,14 +389,14 @@ function App() {
     else if (type === 'mood') {
         setLoading(true); setTab('mood'); setSelectedItem(item);
         try {
-            const res = await fetch(`${API_BASE}/search/playlists?query=${encodeURIComponent(item.query)}`).then(r=>r.json());
+            const res = await fetch(`https://jio-codesudo.vercel.app/api/search/playlists?query=${encodeURIComponent(item.query)}`).then(r=>r.json());
             setMoodPlaylists(res?.data?.results || []);
         } catch(e) { console.error(e); } finally { setLoading(false); }
     }
     else {
       setSelectedItem(item); setTab('details'); setLoading(true); setDetailsSongs([]);
       try {
-        let endpoint = type === 'album' ? `${API_BASE}/albums?id=${item.id}` : type === 'artist' ? `${API_BASE}/artists?id=${item.id}` : `${API_BASE}/playlists?id=${item.id}`;
+        let endpoint = type === 'album' ? `https://jio-codesudo.vercel.app/api/albums?id=${item.id}` : type === 'artist' ? `https://jio-codesudo.vercel.app/api/artists?id=${item.id}` : `https://jio-codesudo.vercel.app/api/playlists?id=${item.id}`;
         const res = await fetch(endpoint).then(r=>r.json());
         if(res.success) setDetailsSongs(res.data.songs || res.data.topSongs || []);
       } catch(e) { console.error(e); } finally { setLoading(false); }
@@ -510,14 +577,14 @@ function App() {
         <div className="main-content">
             <div className="header">
                 <div className="search-box">
-                    {/* --- THE NEW SOURCE DROPDOWN --- */}
+                    {/* --- THE YOUTUBE SOURCE SWITCHER --- */}
                     <select 
                       value={source} 
                       onChange={(e) => setSource(e.target.value)}
                       style={{background: 'transparent', border: 'none', color: '#d4acfb', outline: 'none', marginRight: '8px', cursor: 'pointer', fontWeight: 'bold'}}
                     >
                       <option value="saavn">JioSaavn</option>
-                      <option value="itunes">Apple Music</option>
+                      <option value="youtube">YouTube Music</option>
                     </select>
                     <div style={{width: 1, height: 20, background: '#333', marginRight: 8}}></div>
                     {/* ----------------------------- */}
@@ -573,10 +640,10 @@ function App() {
                     <div className="section">
                         {resSongs.length > 0 && (
                             <>
-                                <div className="section-header">Songs</div>
+                                <div className="section-header">Songs from {APIs[source].name}</div>
                                 <div className="grid">
                                     {resSongs.map(s => (
-                                        <div key={s.id} className="card" onClick={()=>handleCardClick(s, 'song')}>
+                                        <div key={s.id} className="card" onClick={()=>playSong(resSongs, resSongs.indexOf(s))}>
                                             <img src={getImg(s.image)} alt=""/>
                                             <h3>{getName(s)}</h3>
                                             <p>{getDesc(s)}</p>
