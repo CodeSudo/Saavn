@@ -983,7 +983,7 @@ function App() {
         </div>
 
         {/* --- PLAYER BAR --- */}
-        <div className={`player-bar ${currentSong ? 'visible' : ''}`} style={{transform: currentSong ? 'translateY(0)' : 'translateY(100%)', transition:'transform 0.3s'}}>
+        <div className={`player-bar ${currentSong ? 'visible' : ''}`} style={{transform: currentSong ? 'translateY(0)' : 'translateY(200px)', transition:'transform 0.3s'}}>
             {currentSong && (
                 <>
                     {/* Mobile Progress Bar (Visual only, top of player) */}
