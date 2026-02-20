@@ -84,22 +84,53 @@ body { background-color: var(--bg-main); color: var(--text-main); height: 100vh;
 .horizontal-scroll::-webkit-scrollbar { display: none; }
 
 /* Grid */
-.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 24px; }
+/* Grid */
+.grid { 
+  display: grid; 
+  /* Shrinking 180px to 150px makes the tiles much better proportioned */
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); 
+  gap: 20px; 
+}
 
 .card {
-  min-width: 180px; width: 180px; cursor: pointer; transition: 0.3s; position: relative;
+  cursor: pointer; transition: 0.3s; position: relative;
   background: var(--bg-card); padding: 16px; border-radius: 16px;
+  /* Add flexbox to push content evenly */
+  display: flex; flex-direction: column; 
 }
-.grid .card { width: auto; min-width: auto; }
+
+.grid .card { 
+  width: 100%; 
+  height: 100%; /* Forces every card in a row to be the exact same height */
+  min-width: 0; 
+}
+
 .card:hover { background: #222; transform: translateY(-6px); }
-.card img { width: 100%; aspect-ratio: 1; border-radius: 12px; margin-bottom: 14px; object-fit: cover; }
-.card h3 { font-size: 1rem; font-weight: 700; margin-bottom: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.card p { font-size: 0.85rem; color: var(--text-sec); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.card-actions { position: absolute; bottom: 16px; right: 16px; display: flex; gap: 8px; opacity: 0; transition: 0.2s; }
-.card:hover .card-actions { opacity: 1; }
-.btn-card-action { width: 32px; height: 32px; border-radius: 50%; border: none; background: rgba(0,0,0,0.7); color: white; cursor: pointer; display: flex; align-items: center; justify-content: center; backdrop-filter: blur(5px); }
-.btn-card-action:hover { background: var(--primary); color: var(--on-primary); }
-.btn-card-action.liked { color: var(--accent); }
+
+.card img { 
+  width: 100%; 
+  aspect-ratio: 1; 
+  border-radius: 12px; 
+  margin-bottom: 14px; 
+  object-fit: cover; 
+}
+
+.card h3 { 
+  font-size: 1rem; font-weight: 700; margin-bottom: 4px; 
+  /* Force text to truncate with ... */
+  width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; 
+}
+
+.card p { 
+  font-size: 0.85rem; color: var(--text-sec); 
+  /* Force text to truncate with ... */
+  width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; 
+}
+
+.card-actions { 
+  position: absolute; bottom: 16px; right: 16px; 
+  display: flex; gap: 8px; opacity: 0; transition: 0.2s; 
+}
 
 /* Details Page */
 .details-header { display: flex; align-items: flex-end; gap: 32px; margin-bottom: 40px; }
