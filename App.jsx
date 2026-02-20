@@ -68,8 +68,8 @@ const APIs = {
   soundcloud: {
     name: 'SoundCloud',
     token: null, 
-    clientId: import.meta.env.VITE_SOUNDCLOUD_CLIENT_ID,         // <--- PASTE HERE
-    clientSecret: import.meta.env.VITE_SOUNDCLOUD_CLIENT_SECRET, // <--- PASTE HERE
+    clientId: import.meta.env.VITE_SOUNDCLOUD_CLIENT_ID,         
+    clientSecret: import.meta.env.VITE_SOUNDCLOUD_CLIENT_SECRET, 
     
     auth: async function() {
       if (this.token) return this.token; 
@@ -110,6 +110,33 @@ const APIs = {
         headers: { 'Authorization': `OAuth ${token}` }
       });
       return res.url; 
+    }
+  },
+  // --- NEW: QOBUZ INTEGRATION ---
+  qobuz: {
+    name: 'Qobuz',
+    appId: import.meta.env.VITE_QOBUZ_APP_ID, // <-- ADD THIS TO VERCEL
+    token: import.meta.env.VITE_QOBUZ_TOKEN,  // <-- ADD THIS TO VERCEL
+    
+    search: async function(query) {
+      const res = await fetch(`https://www.qobuz.com/api.json/0.2/catalog/search?query=${encodeURIComponent(query)}&limit=25`, {
+        headers: {
+          'X-App-Id': this.appId,
+          'X-User-Auth-Token': this.token
+        }
+      });
+      const data = await res.json();
+      
+      return (data.tracks?.items || []).map(item => ({
+        id: String(item.id),
+        name: item.title,
+        primaryArtists: item.performer?.name || "Unknown Artist",
+        image: [{ url: item.album?.image?.large || "https://via.placeholder.com/150" }],
+        // Qobuz previews map cleanly into your existing downloadUrl format
+        downloadUrl: [{ url: item.previewUrl, quality: '320kbps' }], 
+        duration: item.duration || 0,
+        source: 'qobuz'
+      }));
     }
   }
 };
@@ -251,7 +278,7 @@ function App() {
           ]);
           setResSongs(s?.data?.results || []); setResAlbums(a?.data?.results || []); setResArtists(ar?.data?.results || []); setResPlaylists(p?.data?.results || []);
       } else {
-          // Dynamic API router for Apple Music and SoundCloud
+          // Dynamic API router for Apple Music, SoundCloud, and Qobuz!
           const songs = await APIs[source].search(searchQuery);
           setResSongs(songs);
       }
@@ -282,7 +309,7 @@ function App() {
     } catch(e) { toast.error("Error loading lyrics", { id: toastId }); }
   };
 
-  // --- ASYNC PLAYER LOGIC (CRUCIAL FOR SOUNDCLOUD) ---
+  // --- ASYNC PLAYER LOGIC ---
   const playSong = async (list, idx) => {
     if(!list || !list[idx]) return;
     setQueue(list); setQIndex(idx);
@@ -305,7 +332,7 @@ function App() {
             return;
         }
     } 
-    // 2. Standard JioSaavn/Apple Music URLs
+    // 2. Standard JioSaavn/Apple Music/Qobuz URLs
     else if (s.downloadUrl && Array.isArray(s.downloadUrl)) {
         const urlObj = s.downloadUrl.find(u => u.quality === quality);
         url = urlObj ? urlObj.url : (s.downloadUrl[s.downloadUrl.length-1]?.url || s.downloadUrl[0]?.url);
@@ -611,7 +638,7 @@ function App() {
         <div className="main-content">
             <div className="header">
                 <div className="search-box">
-                    {/* --- THE MULTI-SOURCE DROPDOWN --- */}
+                    {/* --- MULTI-SOURCE DROPDOWN WITH QOBUZ ADDED --- */}
                     <select 
                       value={source} 
                       onChange={(e) => setSource(e.target.value)}
@@ -620,6 +647,7 @@ function App() {
                       <option value="saavn">JioSaavn</option>
                       <option value="itunes">Apple Music</option>
                       <option value="soundcloud">SoundCloud</option>
+                      <option value="qobuz">Qobuz</option>
                     </select>
                     <div style={{width: 1, height: 20, background: '#333', marginRight: 8}}></div>
 
