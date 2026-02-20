@@ -84,49 +84,18 @@ body { background-color: var(--bg-main); color: var(--text-main); height: 100vh;
 .horizontal-scroll::-webkit-scrollbar { display: none; }
 
 /* Grid */
-.grid { 
-  display: grid; 
-  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); 
-  gap: 20px; 
-}
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 24px; }
 
 .card {
-  cursor: pointer; transition: 0.3s; position: relative;
+  min-width: 180px; width: 180px; cursor: pointer; transition: 0.3s; position: relative;
   background: var(--bg-card); padding: 16px; border-radius: 16px;
-  display: flex; flex-direction: column; 
 }
-
-.grid .card { 
-  width: 100%; 
-  height: 100%; 
-  min-width: 0; 
-}
-
+.grid .card { width: auto; min-width: auto; }
 .card:hover { background: #222; transform: translateY(-6px); }
-
-.card img { 
-  width: 100%; 
-  aspect-ratio: 1; 
-  border-radius: 12px; 
-  margin-bottom: 14px; 
-  object-fit: cover; 
-}
-
-.card h3 { 
-  font-size: 1rem; font-weight: 700; margin-bottom: 4px; 
-  width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; 
-}
-
-.card p { 
-  font-size: 0.85rem; color: var(--text-sec); 
-  width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; 
-}
-
-.card-actions { 
-  position: absolute; bottom: 16px; right: 16px; 
-  display: flex; gap: 8px; opacity: 0; transition: 0.2s; 
-}
-
+.card img { width: 100%; aspect-ratio: 1; border-radius: 12px; margin-bottom: 14px; object-fit: cover; }
+.card h3 { font-size: 1rem; font-weight: 700; margin-bottom: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.card p { font-size: 0.85rem; color: var(--text-sec); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.card-actions { position: absolute; bottom: 16px; right: 16px; display: flex; gap: 8px; opacity: 0; transition: 0.2s; }
 .card:hover .card-actions { opacity: 1; }
 .btn-card-action { width: 32px; height: 32px; border-radius: 50%; border: none; background: rgba(0,0,0,0.7); color: white; cursor: pointer; display: flex; align-items: center; justify-content: center; backdrop-filter: blur(5px); }
 .btn-card-action:hover { background: var(--primary); color: var(--on-primary); }
@@ -209,16 +178,18 @@ body { background-color: var(--bg-main); color: var(--text-main); height: 100vh;
   .main-content { margin-left: 0; width: 100%; height: 100vh; padding-bottom: 0; }
   
   /* --- MOBILE HEADER REDESIGN --- */
+  /* We use CSS Grid to inject a logo and organize the search/profile nicely */
   .header { 
     height: auto; 
     padding: 16px; 
     display: grid;
-    grid-template-columns: 1fr auto;
-    grid-template-rows: auto auto;
+    grid-template-columns: 1fr auto; /* Logo left, Profile right */
+    grid-template-rows: auto auto;   /* Top row, Bottom row (Search) */
     gap: 16px;
     align-items: center;
   }
   
+  /* CSS-Only Logo Injection for Mobile */
   .header::before {
     content: "Void.";
     grid-column: 1;
@@ -235,10 +206,10 @@ body { background-color: var(--bg-main); color: var(--text-main); height: 100vh;
     background: transparent; 
     border: 1px solid var(--border); 
   }
-  .user-pill span { display: none; }
+  .user-pill span { display: none; } /* Hide text, show only avatar */
 
   .search-box { 
-    grid-column: 1 / -1; 
+    grid-column: 1 / -1; /* Span entire bottom row */
     grid-row: 2;
     width: 100%; 
     padding: 10px 16px;
@@ -246,7 +217,7 @@ body { background-color: var(--bg-main); color: var(--text-main); height: 100vh;
   .search-box select { max-width: 100px; font-size: 0.8rem; }
   
   /* Scroll Content Spacing */
-  .scroll-area { padding: 10px 16px 170px 16px; } 
+  .scroll-area { padding: 10px 16px 170px 16px; } /* Huge padding to clear bottom nav & floating player */
   
   .hero { padding: 24px; border-radius: 16px; }
   .hero h1 { font-size: 2rem; }
@@ -254,13 +225,13 @@ body { background-color: var(--bg-main); color: var(--text-main); height: 100vh;
   /* Adjust Grids to fit phones */
   .grid { grid-template-columns: repeat(2, 1fr); gap: 16px; }
   .card { min-width: 140px; width: auto; padding: 12px; }
-  .card-actions { opacity: 1; bottom: 12px; right: 12px; } 
+  .card-actions { opacity: 1; bottom: 12px; right: 12px; } /* Always show icons on mobile */
   
   /* Details Screen */
   .details-header { flex-direction: column; align-items: center; text-align: center; gap: 20px; }
   .details-art { width: 200px; height: 200px; }
   .details-meta h1 { font-size: 1.8rem; }
-  .track-num { display: none; }
+  .track-num { display: none; } /* Hide track numbers to save space */
   
   /* Profile View Adjustments */
   .profile-view > div:first-child { flex-direction: column; text-align: center; padding: 24px; }
@@ -270,7 +241,7 @@ body { background-color: var(--bg-main); color: var(--text-main); height: 100vh;
      ================================== */
   .player-bar { 
     left: 10px; right: 10px; 
-    bottom: 80px; 
+    bottom: 80px; /* Hovers right above the bottom nav */
     height: 65px; 
     padding: 0 12px; 
     border-radius: 12px; 
@@ -281,39 +252,45 @@ body { background-color: var(--bg-main); color: var(--text-main); height: 100vh;
     flex-direction: row; 
     align-items: center; 
     justify-content: space-between;
-    flex-wrap: nowrap; 
+    flex-wrap: nowrap; /* CRITICAL */
     z-index: 300;
   }
   
+  /* Track Info - Min-Width 0 stops text from breaking Flexbox */
   .p-track { 
     flex: 1; 
-    min-width: 0; 
+    min-width: 0; /* CRITICAL BUG FIX */
     width: auto;
     margin-right: 12px;
   }
   .p-track img { width: 44px; height: 44px; border-radius: 8px; }
   
   .p-center { 
-    flex: 0 0 auto; 
+    flex: 0 0 auto; /* Protects buttons from getting squished */
     width: auto; 
     align-items: center; 
     justify-content: center; 
   }
   
+  /* Isolate controls */
   .p-controls { gap: 16px; display: flex; align-items: center; }
+  
+  /* Hide Desktop Icons */
   .p-controls .btn-icon, .p-right { display: none !important; } 
   
+  /* Reveal ONLY Play and Next */
   .p-controls .btn-play { 
     display: flex !important; 
     width: 44px; height: 44px; 
     font-size: 1.2rem; 
   }
   .p-controls button:nth-child(4) { 
-    display: flex !important; 
+    display: flex !important; /* Forces SkipFwd to show */
     font-size: 1.4rem; 
     color: var(--text-main);
   }
   
+  /* Make Progress Bar a tiny sliver at the top of the floating player */
   .progress-container {
     position: absolute; top: 0; left: 0; right: 0; width: 100%; height: 3px; gap: 0; border-radius: 12px 12px 0 0; overflow: hidden;
   }
@@ -330,7 +307,7 @@ body { background-color: var(--bg-main); color: var(--text-main); height: 100vh;
     display: flex; justify-content: space-around; 
     align-items: center; z-index: 200; 
     border-top: 1px solid var(--border); 
-    padding-bottom: env(safe-area-inset-bottom, 10px); 
+    padding-bottom: env(safe-area-inset-bottom, 10px); /* For iPhones */
   }
   .nav-tab { 
     display: flex; flex-direction: column; align-items: center; 
@@ -340,6 +317,7 @@ body { background-color: var(--bg-main); color: var(--text-main); height: 100vh;
   .nav-tab svg { width: 22px; height: 22px; }
   .nav-tab.active { color: var(--primary); }
   
+  /* Full Screen Overlays */
   .lyrics-overlay { bottom: 0; top: 0; }
   .queue-sidebar { width: 100%; bottom: 0; top: 0; }
 }
