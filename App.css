@@ -98,7 +98,7 @@ body { background-color: var(--bg-main); color: var(--text-main); height: 100vh;
 .player-bar { position: fixed; bottom: 0; left: var(--sidebar-width); right: 0; height: var(--player-height); background: var(--bg-glass); backdrop-filter: blur(20px); border-top: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; padding: 0 40px; z-index: 100; transition: transform 0.3s ease; }
 .p-track { display: flex; align-items: center; gap: 16px; flex: 1; min-width: 0; }
 .p-track img { width: 64px; height: 64px; border-radius: 12px; object-fit: cover; box-shadow: 0 4px 12px rgba(0,0,0,0.3); }
-.p-center { flex: 2; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; max-width: 600px; }
+.p-center {  flex: 1;   display: flex;  flex-direction: column;  align-items: center;  justify-content: center;  gap: 8px;  max-width: 500px;   margin: 0 auto; /* This forces it to the absolute center */}
 .p-controls { display: flex; align-items: center; gap: 24px; }
 .btn-icon { background: none; border: none; color: var(--text-sec); font-size: 1.4rem; cursor: pointer; transition: 0.2s; display: flex; align-items: center; }
 .btn-icon:hover, .btn-icon.active { color: white; }
