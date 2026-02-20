@@ -223,9 +223,38 @@ body { background-color: var(--bg-main); color: var(--text-main); height: 100vh;
   .hero h1 { font-size: 2rem; }
   
   /* Adjust Grids to fit phones */
-  .grid { grid-template-columns: repeat(2, 1fr); gap: 16px; }
-  .card { min-width: 140px; width: auto; padding: 12px; }
-  .card-actions { opacity: 1; bottom: 12px; right: 12px; } /* Always show icons on mobile */
+ /* Adjust Grids to fit phones - SMALLER & CLEANER TILES */
+  .grid { 
+    /* This allows 3 tiles to fit on most phone screens instead of 2 */
+    grid-template-columns: repeat(auto-fill, minmax(105px, 1fr)); 
+    gap: 12px; 
+  }
+  .card { 
+    min-width: 0; /* Removes the desktop min-width limitation */
+    width: 100%; 
+    padding: 10px; 
+    border-radius: 12px;
+  }
+  .card img { 
+    margin-bottom: 8px; 
+    border-radius: 8px; 
+  }
+  .card h3 { 
+    font-size: 0.85rem; /* Scaled down for mobile */
+    margin-bottom: 2px;
+  }
+  .card p { 
+    font-size: 0.75rem; /* Scaled down for mobile */
+  }
+  .card-actions { 
+    opacity: 1; 
+    bottom: 8px; 
+    right: 8px; 
+  } 
+  .btn-card-action {
+    width: 28px; 
+    height: 28px; /* Slightly smaller heart/plus buttons */
+  }
   
   /* Details Screen */
   .details-header { flex-direction: column; align-items: center; text-align: center; gap: 20px; }
