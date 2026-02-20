@@ -59,10 +59,13 @@ body { background-color: var(--bg-main); color: var(--text-main); height: 100vh;
 .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 20px; }
 
 /* THIS IS THE FIX: Locks horizontal cards to a perfect square shape */
-.horizontal-scroll .card { 
-  min-width: 180px; 
-  width: 180px; 
-  flex: 0 0 auto; /* Prevents flexbox from squishing or stretching the card */
+
+/* Lifts the flexbox curse so horizontal cards never squish */
+.horizontal-scroll .card {
+  min-width: 180px !important;
+  width: 180px !important;
+  max-width: 180px !important;
+  flex: 0 0 auto !important; 
 }
 
 .card { cursor: pointer; transition: 0.3s; position: relative; background: var(--bg-card); padding: 16px; border-radius: 16px; display: flex; flex-direction: column; }
