@@ -161,7 +161,7 @@ const APIs = {
       }));
     }
   }
-
+}
 const MOODS = [
   { id: 'm1', name: 'Party', color: '#e57373', query: 'Party Hits' },
   { id: 'm2', name: 'Romance', color: '#f06292', query: 'Love Songs' },
