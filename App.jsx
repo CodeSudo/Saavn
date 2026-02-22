@@ -192,8 +192,8 @@ function App() {
   const [resPlaylists, setResPlaylists] = useState([]);
   const [moodPlaylists, setMoodPlaylists] = useState([]);
 
-  const [homeData, setHomeData] = useState({ 
-    trending: [], charts: [], newAlbums: [], playlists: [] 
+const [homeData, setHomeData] = useState({ 
+    trending: [], charts: [], newAlbums: [], editorial: [], radio: [], topArtists: [], love: [], fresh: [], nineties: [], hindiPop: [] 
   });
   
   // Details & Modals
@@ -311,22 +311,36 @@ function App() {
   }, []);
 
 
+// --- RESTORED HOMEPAGE FETCH (Using your stable API) ---
   const fetchHome = async () => {
     setLoading(true);
     try {
-      const res = await fetch(`${API_BASE}/modules?language=hindi,english,punjabi`);
-      const response = await res.json();
-      
-      if (response.data) {
-        const liveData = response.data;
-        setHomeData({ 
-          trending: liveData.trending?.albums || liveData.trending?.songs || liveData.trending || [], 
-          charts: liveData.charts || [], 
-          newAlbums: liveData.albums || [], 
-          playlists: liveData.playlists || [],
-        });
-      }
-    } catch(e) { console.error("Home Data Fetch Error:", e); } 
+      const results = await Promise.all([
+        fetch(`${API_BASE}/search/songs?query=Top 50&limit=15`).then(r=>r.json()).catch(()=>({})),
+        fetch(`${API_BASE}/search/playlists?query=Top Charts&limit=15`).then(r=>r.json()).catch(()=>({})),
+        fetch(`${API_BASE}/search/albums?query=New&limit=15`).then(r=>r.json()).catch(()=>({})),
+        fetch(`${API_BASE}/search/playlists?query=Editors Pick&limit=15`).then(r=>r.json()).catch(()=>({})),
+        fetch(`${API_BASE}/search/artists?query=Best&limit=15`).then(r=>r.json()).catch(()=>({})), 
+        fetch(`${API_BASE}/search/artists?query=Top Artists&limit=15`).then(r=>r.json()).catch(()=>({})),
+        fetch(`${API_BASE}/search/playlists?query=Love&limit=15`).then(r=>r.json()).catch(()=>({})),
+        fetch(`${API_BASE}/search/playlists?query=Fresh Hits&limit=15`).then(r=>r.json()).catch(()=>({})),
+        fetch(`${API_BASE}/search/playlists?query=90s Bollywood&limit=15`).then(r=>r.json()).catch(()=>({})),
+        fetch(`${API_BASE}/search/albums?query=New Hindi Pop&limit=15`).then(r=>r.json()).catch(()=>({}))
+      ]);
+
+      setHomeData({ 
+        trending: results[0]?.data?.results || [], 
+        charts: results[1]?.data?.results || [], 
+        newAlbums: results[2]?.data?.results || [], 
+        editorial: results[3]?.data?.results || [],
+        radio: results[4]?.data?.results || [],
+        topArtists: results[5]?.data?.results || [], 
+        love: results[6]?.data?.results || [],
+        fresh: results[7]?.data?.results || [],
+        nineties: results[8]?.data?.results || [],
+        hindiPop: results[9]?.data?.results || []
+      });
+    } catch(e) { console.error("Home Error", e); } 
     finally { setLoading(false); }
   };
 
@@ -960,6 +974,7 @@ function App() {
                 )}
 
                 {/* --- LIVE HOMEPAGE VIEW --- */}
+{/* --- RESTORED HOMEPAGE VIEW --- */}
                 {tab === 'home' && (
                     <>
                         <div className="hero">
@@ -994,64 +1009,148 @@ function App() {
                             </div>
                         </div>
 
-                        {/* 3. LIVE JioSaavn Trending */}
+                        {/* 3. Trending */}
                         {homeData.trending.length > 0 && (
                             <div className="section">
                                 <div className="section-header">Trending Now</div>
                                 <div className="horizontal-scroll">
-                                    {homeData.trending.map(item => (
-                                        <div key={item.id} className="card" onClick={()=>handleCardClick(item, item.type || 'album')}>
-                                            <img src={getImg(item.image)} alt=""/>
-                                            <h3>{getName(item)}</h3>
-                                            <p>{getDesc(item)}</p>
+                                    {homeData.trending.map(s => (
+                                        <div key={s.id} className="card" onClick={()=>handleCardClick(s, 'song')}>
+                                            <img src={getImg(s.image)} alt=""/>
+                                            <h3>{getName(s)}</h3>
+                                            <p>{getDesc(s)}</p>
+                                            <div className="card-actions">
+                                                <button className={`btn-card-action ${isLiked(s.id)?'liked':''}`} onClick={(e)=>{e.stopPropagation(); toggleLike(s)}}><Icons.Heart/></button>
+                                                <button className="btn-card-action" onClick={(e)=>{e.stopPropagation(); setSongToAdd(s); setShowAddToPlaylistModal(true);}}><Icons.Plus/></button>
+                                            </div>
                                         </div>
                                     ))}
                                 </div>
                             </div>
                         )}
 
-                        {/* 4. LIVE JioSaavn Top Charts */}
+                        {/* 4. Top Charts */}
                         {homeData.charts.length > 0 && (
                             <div className="section">
                                 <div className="section-header">Top Charts</div>
                                 <div className="horizontal-scroll">
-                                    {homeData.charts.map(chart => (
-                                        <div key={chart.id} className="card" onClick={()=>handleCardClick(chart, 'playlist')}>
-                                            <img src={getImg(chart.image)} alt=""/>
-                                            <h3>{getName(chart)}</h3>
-                                            <p>{chart.language || 'Chart'}</p>
+                                    {homeData.charts.map(p => (
+                                        <div key={p.id} className="card" onClick={()=>handleCardClick(p, 'playlist')}>
+                                            <img src={getImg(p.image)} alt=""/>
+                                            <h3>{getName(p)}</h3>
+                                            <p>{p.language}</p>
                                         </div>
                                     ))}
                                 </div>
                             </div>
                         )}
 
-                        {/* 5. LIVE JioSaavn New Albums */}
+                        {/* 5. New Albums */}
                         {homeData.newAlbums.length > 0 && (
                             <div className="section">
-                                <div className="section-header">New Releases</div>
+                                <div className="section-header">New Albums</div>
                                 <div className="horizontal-scroll">
-                                    {homeData.newAlbums.map(album => (
-                                        <div key={album.id} className="card" onClick={()=>handleCardClick(album, 'album')}>
-                                            <img src={getImg(album.image)} alt=""/>
-                                            <h3>{getName(album)}</h3>
-                                            <p>{album.language || 'Album'}</p>
+                                    {homeData.newAlbums.map(a => (
+                                        <div key={a.id} className="card" onClick={()=>handleCardClick(a, 'album')}>
+                                            <img src={getImg(a.image)} alt=""/>
+                                            <h3>{getName(a)}</h3>
+                                            <p>{a.year}</p>
                                         </div>
                                     ))}
                                 </div>
                             </div>
                         )}
 
-                        {/* 6. LIVE JioSaavn Editor Playlists */}
-                        {homeData.playlists.length > 0 && (
+                        {/* 6. Radio (Artists) */}
+                        {homeData.radio.length > 0 && (
+                            <div className="section">
+                                <div className="section-header">Radio Stations</div>
+                                <div className="horizontal-scroll">
+                                    {homeData.radio.map(a => (
+                                        <div key={a.id} className="card" onClick={()=>handleCardClick(a, 'artist')}>
+                                            <img src={getImg(a.image)} alt="" style={{borderRadius:'50%'}}/>
+                                            <h3 style={{textAlign:'center'}}>{getName(a)}</h3>
+                                            <p style={{textAlign:'center', fontSize:'0.8rem'}}>Artist Radio</p>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+
+                        {/* 7. Top Artists */}
+                        {homeData.topArtists.length > 0 && (
+                            <div className="section">
+                                <div className="section-header">Top Artists</div>
+                                <div className="horizontal-scroll">
+                                    {homeData.topArtists.map(a => (
+                                        <div key={a.id} className="card" onClick={()=>handleCardClick(a, 'artist')}>
+                                            <img src={getImg(a.image)} alt="" style={{borderRadius:'50%'}}/>
+                                            <h3 style={{textAlign:'center'}}>{getName(a)}</h3>
+                                            <p style={{textAlign:'center', fontSize:'0.8rem'}}>Artist</p>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+
+                        {/* 8. Editorial */}
+                        {homeData.editorial.length > 0 && (
                             <div className="section">
                                 <div className="section-header">Editorial Picks</div>
                                 <div className="horizontal-scroll">
-                                    {homeData.playlists.map(playlist => (
-                                        <div key={playlist.id} className="card" onClick={()=>handleCardClick(playlist, 'playlist')}>
-                                            <img src={getImg(playlist.image)} alt=""/>
-                                            <h3>{getName(playlist)}</h3>
-                                            <p>{playlist.subtitle || 'Curated'}</p>
+                                    {homeData.editorial.map(p => (
+                                        <div key={p.id} className="card" onClick={()=>handleCardClick(p, 'playlist')}>
+                                            <img src={getImg(p.image)} alt=""/>
+                                            <h3>{getName(p)}</h3>
+                                            <p>Featured</p>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+
+                        {/* 9. Fresh Hits */}
+                        {homeData.fresh.length > 0 && (
+                            <div className="section">
+                                <div className="section-header">Fresh Hits</div>
+                                <div className="horizontal-scroll">
+                                    {homeData.fresh.map(p => (
+                                        <div key={p.id} className="card" onClick={()=>handleCardClick(p, 'playlist')}>
+                                            <img src={getImg(p.image)} alt=""/>
+                                            <h3>{getName(p)}</h3>
+                                            <p>New Music</p>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+
+                        {/* 10. 90s Magic */}
+                        {homeData.nineties.length > 0 && (
+                            <div className="section">
+                                <div className="section-header">Best of 90s</div>
+                                <div className="horizontal-scroll">
+                                    {homeData.nineties.map(p => (
+                                        <div key={p.id} className="card" onClick={()=>handleCardClick(p, 'playlist')}>
+                                            <img src={getImg(p.image)} alt=""/>
+                                            <h3>{getName(p)}</h3>
+                                            <p>Nostalgia</p>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+
+                        {/* 11. Hindi Pop */}
+                        {homeData.hindiPop.length > 0 && (
+                            <div className="section">
+                                <div className="section-header">New Hindi Pop</div>
+                                <div className="horizontal-scroll">
+                                    {homeData.hindiPop.map(a => (
+                                        <div key={a.id} className="card" onClick={()=>handleCardClick(a, 'album')}>
+                                            <img src={getImg(a.image)} alt=""/>
+                                            <h3>{getName(a)}</h3>
+                                            <p>{a.year}</p>
                                         </div>
                                     ))}
                                 </div>
