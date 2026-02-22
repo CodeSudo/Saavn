@@ -400,37 +400,41 @@ const [homeData, setHomeData] = useState({
   };
 
   // --- HYBRID PLAYER LOGIC ---
-// --- HYBRID PLAYER LOGIC (With YouTube Proxy Bypass) ---
   const playSong = async (list, idx) => {
     if(!list || !list[idx]) return;
     setQueue(list); setQIndex(idx);
     const s = list[idx];
     setCurrentSong(s);
     addToHistory(s);
+
+    // 1. YouTube Routing (Using your specific Iframe & Watchdog logic)
+    if (s.source === 'youtube') {
+      audioRef.current.pause(); // Ensure HTML5 player stops
+      
+      clearTimeout(watchdogRef.current);
+      watchdogRef.current = setTimeout(() => {
+        console.warn("YouTube Freeze detected. Re-initializing player...");
+        initYTPlayer(s.id);
+      }, 3000);
+
+      if (ytReady && ytPlayerRef.current && typeof ytPlayerRef.current.loadVideoById === 'function') {
+        ytPlayerRef.current.loadVideoById(s.id);
+        ytPlayerRef.current.playVideo();
+      } else {
+        initYTPlayer(s.id);
+      }
+      return; 
+    }
     
-    // Stop YouTube Iframe if it was playing previously
+    // 2. Stop YouTube if playing standard audio
     if (ytPlayerRef.current && typeof ytPlayerRef.current.pauseVideo === 'function') {
       ytPlayerRef.current.pauseVideo();
     }
     
+    // 3. Resolve standard Streams (SoundCloud, Saavn, Qobuz)
     let url = "";
 
-    // 1. YouTube Routing (Bypassing Iframe via your Next.js Backend)
-    if (s.source === 'youtube') {
-        const toastId = toast.loading("Bypassing YouTube restrictions...");
-        try {
-            const cleanBase = APIs.youtube.apiBase.replace(/\/$/, '');
-            // Directly stream the audio from your Vercel server to bypass regional blocks!
-            url = `${cleanBase}/api/stream?videoId=${s.id}`;
-            toast.dismiss(toastId);
-        } catch (e) {
-            toast.dismiss(toastId);
-            toast.error("Failed to extract YouTube stream.");
-            return;
-        }
-    }
-    // 2. SoundCloud Routing
-    else if (s.source === 'soundcloud') {
+    if (s.source === 'soundcloud') {
         const toastId = toast.loading("Loading SoundCloud Stream...");
         try {
             url = await APIs.soundcloud.getStreamUrl(s.id);
@@ -442,7 +446,6 @@ const [homeData, setHomeData] = useState({
             return;
         }
     } 
-    // 3. JioSaavn, Qobuz, Apple Music Routing
     else if (s.downloadUrl && Array.isArray(s.downloadUrl)) {
         const urlObj = s.downloadUrl.find(u => u.quality === quality);
         url = urlObj ? urlObj.url : (s.downloadUrl[s.downloadUrl.length-1]?.url || s.downloadUrl[0]?.url);
