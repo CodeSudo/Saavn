@@ -21,7 +21,10 @@ const Icons = {
   Repeat: () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>,
   RepeatOne: () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/><text x="10" y="15" fontSize="8" fill="currentColor" style={{fontWeight:'bold'}}>1</text></svg>,
   Radio: () => <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="2"/><path d="M16.24 7.76a6 6 0 0 1 0 8.49m-8.48-.01a6 6 0 0 1 0-8.49m11.31-2.82a10 10 0 0 1 0 14.14m-14.14 0a10 10 0 0 1 0-14.14"/></svg>,
-  Back: () => <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>
+  Back: () => <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>,
+  // --- NEW ICONS FOR THEATER MODE ---
+  Maximize: () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg>,
+  Minimize: () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="4 14 10 14 10 20"/><polyline points="20 10 14 10 14 4"/><line x1="14" y1="10" x2="21" y2="3"/><line x1="3" y1="21" x2="10" y2="14"/></svg>,
 };
 
 // FIREBASE
@@ -137,9 +140,6 @@ const APIs = {
       }));
     }
   },
-  // --- NEW: YOUTUBE INTEGRATION (Powered by your Next.js Backend) ---
-// --- NEW: YOUTUBE INTEGRATION (Powered by your Next.js Backend) ---
-// --- NEW: YOUTUBE INTEGRATION (Powered by your Next.js Backend) ---
   youtube: {
     name: 'YouTube',
     apiBase: import.meta.env.VITE_YT_API_BASE || 'http://localhost:3000',
@@ -149,27 +149,32 @@ const APIs = {
       const res = await fetch(`${cleanBase}/api/stream?query=${encodeURIComponent(query)}`);
       const data = await res.json();
       
-      return (Array.isArray(data) ? data : []).map(item => {
-        // FIX: Grab the LAST item in the array (the highest resolution one)
-        let highResImage = "https://via.placeholder.com/150";
-        if (item.thumbnails && item.thumbnails.length > 0) {
-           highResImage = item.thumbnails[item.thumbnails.length - 1].url;
-           // Optional: Force Google's image server to upscale it to a crisp 500x500
-           highResImage = highResImage.replace(/=w\d+-h\d+.*/, '=w500-h500-l90-rj');
-        }
+      const formatItem = (item, type) => {
+          let highResImage = "https://via.placeholder.com/150";
+          if (item.thumbnails && item.thumbnails.length > 0) {
+             highResImage = item.thumbnails[item.thumbnails.length - 1].url;
+             highResImage = highResImage.replace(/=w\d+-h\d+.*/, '=w500-h500-l90-rj');
+          }
+          return {
+              id: item.videoId || item.albumId || item.browseId || item.artistId,
+              name: item.name || item.title,
+              primaryArtists: item.artists?.[0]?.name || (type === 'artist' ? 'Artist' : "YouTube"),
+              image: [{ url: highResImage }],
+              duration: item.duration || 0,
+              source: 'youtube',
+              type: type 
+          };
+      };
 
-        return {
-          id: item.videoId,
-          name: item.name || item.title,
-          primaryArtists: item.artists?.[0]?.name || "YouTube Artist",
-          image: [{ url: highResImage }],
-          duration: item.duration || 0,
-          source: 'youtube'
-        };
-      });
+      return {
+          songs: Array.isArray(data.songs) ? data.songs.map(i => formatItem(i, 'song')) : [],
+          albums: Array.isArray(data.albums) ? data.albums.map(i => formatItem(i, 'album')) : [],
+          artists: Array.isArray(data.artists) ? data.artists.map(i => formatItem(i, 'artist')) : []
+      };
     }
   }
-};   
+};
+
 const MOODS = [
   { id: 'm1', name: 'Party', color: '#e57373', query: 'Party Hits' },
   { id: 'm2', name: 'Romance', color: '#f06292', query: 'Love Songs' },
@@ -184,6 +189,9 @@ function App() {
   const [tab, setTab] = useState('home');
   const [loading, setLoading] = useState(false);
   const [user, setUser] = useState(null);
+  
+  // Visual States
+  const [theaterMode, setTheaterMode] = useState(false); // NEW: Controls the full-screen view
   
   // Source State
   const [source, setSource] = useState('saavn');
@@ -200,7 +208,7 @@ function App() {
   const [resPlaylists, setResPlaylists] = useState([]);
   const [moodPlaylists, setMoodPlaylists] = useState([]);
 
-const [homeData, setHomeData] = useState({ 
+  const [homeData, setHomeData] = useState({ 
     trending: [], charts: [], newAlbums: [], editorial: [], radio: [], topArtists: [], love: [], fresh: [], nineties: [], hindiPop: [] 
   });
   
@@ -221,9 +229,9 @@ const [homeData, setHomeData] = useState({
 
   // Standard HTML5 Player Refs
   const audioRef = useRef(new Audio());
-  const preloaderRef = useRef(new Audio());
+  const preloaderRef = useRef(new Audio()); 
   
-  // --- NEW: YOUTUBE IFRAME PLAYER REFS ---
+  // YouTube IFrame Player Refs
   const ytPlayerRef = useRef(null);
   const watchdogRef = useRef(null);
   const ytProgressInterval = useRef(null);
@@ -235,14 +243,13 @@ const [homeData, setHomeData] = useState({
   const [queue, setQueue] = useState([]);
   const [qIndex, setQIndex] = useState(-1);
   const [progress, setProgress] = useState(0);
-  const [bufferProgress, setBufferProgress] = useState(0);
+  const [bufferProgress, setBufferProgress] = useState(0); 
   const [duration, setDuration] = useState(0);
   const [volume, setVolume] = useState(1);
   const [quality, setQuality] = useState('320kbps');
   const [isShuffle, setIsShuffle] = useState(false);
   const [repeatMode, setRepeatMode] = useState('none'); 
 
-  // Store current playing song ID for the YT Error callback
   const currentSongRef = useRef(null);
   useEffect(() => { currentSongRef.current = currentSong; }, [currentSong]);
 
@@ -271,16 +278,14 @@ const [homeData, setHomeData] = useState({
 
   useEffect(() => { setHistory(JSON.parse(localStorage.getItem('musiq_history') || '[]')); }, []);
 
-  // --- YOUTUBE IFRAME INITIALIZATION (Your Logic) ---
+  // --- YOUTUBE IFRAME INITIALIZATION ---
   const initYTPlayer = (videoId = '') => {
     if (ytPlayerRef.current && typeof ytPlayerRef.current.destroy === 'function') {
       try { ytPlayerRef.current.destroy(); } catch (e) {}
     }
 
     ytPlayerRef.current = new window.YT.Player('hidden-yt-player', {
-      height: '0',
-      width: '0',
-      videoId: videoId,
+      height: '0', width: '0', videoId: videoId,
       playerVars: { 'autoplay': 1, 'controls': 0, 'origin': window.location.origin },
       events: {
         'onReady': (event) => {
@@ -292,12 +297,8 @@ const [homeData, setHomeData] = useState({
             clearTimeout(watchdogRef.current);
             setIsPlaying(true);
           }
-          if (event.data === window.YT.PlayerState.PAUSED) {
-            setIsPlaying(false);
-          }
-          if (event.data === window.YT.PlayerState.ENDED) {
-            onTrackEndRef.current(); // Triggers the next track
-          }
+          if (event.data === window.YT.PlayerState.PAUSED) { setIsPlaying(false); }
+          if (event.data === window.YT.PlayerState.ENDED) { onTrackEndRef.current(); }
         },
         'onError': () => {
           console.warn("YT Player Error - Attempting Reset...");
@@ -307,7 +308,6 @@ const [homeData, setHomeData] = useState({
     });
   };
 
-  // Inject YouTube API Script
   useEffect(() => {
     if (!window.YT) {
       const tag = document.createElement('script');
@@ -320,8 +320,6 @@ const [homeData, setHomeData] = useState({
     }
   }, []);
 
-
-// --- RESTORED HOMEPAGE FETCH (Using your stable API) ---
   const fetchHome = async () => {
     setLoading(true);
     try {
@@ -339,16 +337,11 @@ const [homeData, setHomeData] = useState({
       ]);
 
       setHomeData({ 
-        trending: results[0]?.data?.results || [], 
-        charts: results[1]?.data?.results || [], 
-        newAlbums: results[2]?.data?.results || [], 
-        editorial: results[3]?.data?.results || [],
-        radio: results[4]?.data?.results || [],
-        topArtists: results[5]?.data?.results || [], 
-        love: results[6]?.data?.results || [],
-        fresh: results[7]?.data?.results || [],
-        nineties: results[8]?.data?.results || [],
-        hindiPop: results[9]?.data?.results || []
+        trending: results[0]?.data?.results || [], charts: results[1]?.data?.results || [], 
+        newAlbums: results[2]?.data?.results || [], editorial: results[3]?.data?.results || [],
+        radio: results[4]?.data?.results || [], topArtists: results[5]?.data?.results || [], 
+        love: results[6]?.data?.results || [], fresh: results[7]?.data?.results || [],
+        nineties: results[8]?.data?.results || [], hindiPop: results[9]?.data?.results || []
       });
     } catch(e) { console.error("Home Error", e); } 
     finally { setLoading(false); }
@@ -369,8 +362,12 @@ const [homeData, setHomeData] = useState({
             fetch(`${API_BASE}/search/playlists?query=${encodeURIComponent(searchQuery)}`).then(r=>r.json())
           ]);
           setResSongs(s?.data?.results || []); setResAlbums(a?.data?.results || []); setResArtists(ar?.data?.results || []); setResPlaylists(p?.data?.results || []);
+      } else if (source === 'youtube') {
+          const ytData = await APIs.youtube.search(searchQuery);
+          setResSongs(ytData.songs || []);
+          setResAlbums(ytData.albums || []);
+          setResArtists(ytData.artists || []);
       } else {
-          // Dynamic API router hits YouTube, Apple Music, SoundCloud, or Qobuz
           const songs = await APIs[source].search(searchQuery);
           setResSongs(songs);
       }
@@ -409,10 +406,8 @@ const [homeData, setHomeData] = useState({
     setCurrentSong(s);
     addToHistory(s);
 
-    // 1. YouTube Routing (Using your specific Iframe & Watchdog logic)
     if (s.source === 'youtube') {
-      audioRef.current.pause(); // Ensure HTML5 player stops
-      
+      audioRef.current.pause(); 
       clearTimeout(watchdogRef.current);
       watchdogRef.current = setTimeout(() => {
         console.warn("YouTube Freeze detected. Re-initializing player...");
@@ -422,18 +417,14 @@ const [homeData, setHomeData] = useState({
       if (ytReady && ytPlayerRef.current && typeof ytPlayerRef.current.loadVideoById === 'function') {
         ytPlayerRef.current.loadVideoById(s.id);
         ytPlayerRef.current.playVideo();
-      } else {
-        initYTPlayer(s.id);
-      }
+      } else { initYTPlayer(s.id); }
       return; 
     }
     
-    // 2. Stop YouTube if playing standard audio
     if (ytPlayerRef.current && typeof ytPlayerRef.current.pauseVideo === 'function') {
       ytPlayerRef.current.pauseVideo();
     }
     
-    // 3. Resolve standard Streams (SoundCloud, Saavn, Qobuz)
     let url = "";
 
     if (s.source === 'soundcloud') {
@@ -460,15 +451,12 @@ const [homeData, setHomeData] = useState({
             audioRef.current.play().catch(()=>{});
             setIsPlaying(true);
         } else { audioRef.current.play(); setIsPlaying(true); }
-    } else toast.error("Audio unavailable");
+    } else { toast.error("Audio unavailable"); }
   };
 
   const handleQualityChange = (newQ) => {
     setQuality(newQ);
-    if(currentSong && isPlaying) {
-        playSong(queue, qIndex); 
-        toast.success(`Quality set to ${newQ}`);
-    }
+    if(currentSong && isPlaying) { playSong(queue, qIndex); toast.success(`Quality set to ${newQ}`); }
   };
 
   const togglePlay = () => {
@@ -486,11 +474,8 @@ const [homeData, setHomeData] = useState({
     const x = e.nativeEvent.offsetX;
     const seekTo = (x / w) * duration;
     
-    if (currentSong?.source === 'youtube') {
-      ytPlayerRef.current?.seekTo(seekTo, true);
-    } else {
-      audioRef.current.currentTime = seekTo;
-    }
+    if (currentSong?.source === 'youtube') { ytPlayerRef.current?.seekTo(seekTo, true); } 
+    else { audioRef.current.currentTime = seekTo; }
     setProgress(seekTo);
   };
 
@@ -518,7 +503,6 @@ const [homeData, setHomeData] = useState({
     }
   };
 
-  // --- PLAYLIST & LIKE ---
   const toggleLike = async (item) => {
     if(!user) return toast.error("Please Login");
     const liked = isLiked(item.id);
@@ -532,13 +516,8 @@ const [homeData, setHomeData] = useState({
         }
     } else {
         const clean = { 
-            id: String(item.id), 
-            name: getName(item), 
-            primaryArtists: getDesc(item), 
-            image: item.image||[], 
-            downloadUrl: item.downloadUrl||[], 
-            duration: item.duration||0,
-            source: item.source || 'saavn'
+            id: String(item.id), name: getName(item), primaryArtists: getDesc(item), 
+            image: item.image||[], downloadUrl: item.downloadUrl||[], duration: item.duration||0, source: item.source || 'saavn'
         };
         setLikedSongs([...likedSongs, clean]);
         await updateDoc(userRef, { likedSongs: arrayUnion(clean) });
@@ -560,19 +539,14 @@ const [homeData, setHomeData] = useState({
     try {
         const ref = doc(db, `users/${user.uid}/playlists/${playlistId}`);
         const clean = { 
-            id: String(songToAdd.id), 
-            name: getName(songToAdd), 
-            primaryArtists: getDesc(songToAdd), 
-            image: songToAdd.image||[], 
-            downloadUrl: songToAdd.downloadUrl||[],
-            source: songToAdd.source || 'saavn'
+            id: String(songToAdd.id), name: getName(songToAdd), primaryArtists: getDesc(songToAdd), 
+            image: songToAdd.image||[], downloadUrl: songToAdd.downloadUrl||[], source: songToAdd.source || 'saavn'
         };
         await updateDoc(ref, { songs: arrayUnion(clean) });
         toast.success("Added to Playlist"); setShowAddToPlaylistModal(false);
     } catch(e) { toast.error("Failed"); }
   };
 
-  // --- NAVIGATION ---
   const handleCardClick = async (item, type) => {
     const itemType = type || item.type;
     if (itemType === 'song') { playSong([item], 0); }
@@ -587,14 +561,30 @@ const [homeData, setHomeData] = useState({
     else {
       setSelectedItem(item); setTab('details'); setLoading(true); setDetailsSongs([]);
       try {
-        let endpoint = itemType === 'album' ? `${API_BASE}/albums?id=${item.id}` : itemType === 'artist' ? `${API_BASE}/artists?id=${item.id}` : `${API_BASE}/playlists?id=${item.id}`;
-        const res = await fetch(endpoint).then(r=>r.json());
-        if(res.success) setDetailsSongs(res.data.songs || res.data.topSongs || []);
+        if (item.source === 'youtube') {
+            const cleanBase = APIs.youtube.apiBase.replace(/\/$/, '');
+            let endpoint = itemType === 'album' 
+                ? `${cleanBase}/api/stream?albumId=${item.id}` 
+                : `${cleanBase}/api/stream?artistId=${item.id}`;
+                
+            const res = await fetch(endpoint).then(r=>r.json());
+            const tracks = res.songs || res.topSongs || [];
+            
+            const formattedSongs = tracks.map(s => ({
+                id: s.videoId, name: s.name || s.title, primaryArtists: s.artists?.[0]?.name || item.name,
+                image: s.thumbnails ? [{ url: s.thumbnails[s.thumbnails.length-1].url }] : item.image,
+                duration: s.duration || 0, source: 'youtube'
+            }));
+            setDetailsSongs(formattedSongs);
+        } else {
+            let endpoint = itemType === 'album' ? `${API_BASE}/albums?id=${item.id}` : itemType === 'artist' ? `${API_BASE}/artists?id=${item.id}` : `${API_BASE}/playlists?id=${item.id}`;
+            const res = await fetch(endpoint).then(r=>r.json());
+            if(res.success) setDetailsSongs(res.data.songs || res.data.topSongs || []);
+        }
       } catch(e) { console.error(e); } finally { setLoading(false); }
     }
   };
 
-  // --- AUTH & EFFECTS ---
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (u) => {
         if(u) {
@@ -618,30 +608,6 @@ const [homeData, setHomeData] = useState({
     return () => unsub();
   }, []);
 
-  // --- NEW: AUTO-PREFETCH NEXT SONG ---
-  useEffect(() => {
-    // Check if there is a next song in the queue
-    if (qIndex >= 0 && qIndex < queue.length - 1) {
-      const nextSong = queue[qIndex + 1];
-      
-      // We only prefetch standard audio (JioSaavn/Apple/Qobuz). 
-      // YouTube manages its own prefetching inside the IFrame.
-      if (nextSong.source !== 'youtube' && nextSong.source !== 'soundcloud') {
-        let nextUrl = "";
-        if (nextSong.downloadUrl && Array.isArray(nextSong.downloadUrl)) {
-            const urlObj = nextSong.downloadUrl.find(u => u.quality === quality);
-            nextUrl = urlObj ? urlObj.url : (nextSong.downloadUrl[nextSong.downloadUrl.length-1]?.url || nextSong.downloadUrl[0]?.url);
-        }
-        
-        if (nextUrl) {
-            // Tell the browser to quietly download this file in the background
-            preloaderRef.current.src = nextUrl;
-            preloaderRef.current.preload = 'auto'; 
-        }
-      }
-    }
-  }, [qIndex, queue, quality]);
-
   const handleAuth = async () => {
     const toastId = toast.loading("Authenticating...");
     try {
@@ -653,7 +619,6 @@ const [homeData, setHomeData] = useState({
     } catch(e) { toast.error(e.message, { id: toastId }); }
   };
 
-  // Safe Track Progression Callback
   const onTrackEndRef = useRef(() => {});
   useEffect(() => {
     onTrackEndRef.current = () => {
@@ -668,45 +633,44 @@ const [homeData, setHomeData] = useState({
     };
   }, [queue, qIndex, repeatMode, isShuffle, currentSong]);
 
-  // HTML5 Audio Time & End Listeners
-// HTML5 Audio Time, Buffer & End Listeners
+  useEffect(() => {
+    if (qIndex >= 0 && qIndex < queue.length - 1) {
+      const nextSong = queue[qIndex + 1];
+      if (nextSong.source !== 'youtube' && nextSong.source !== 'soundcloud') {
+        let nextUrl = "";
+        if (nextSong.downloadUrl && Array.isArray(nextSong.downloadUrl)) {
+            const urlObj = nextSong.downloadUrl.find(u => u.quality === quality);
+            nextUrl = urlObj ? urlObj.url : (nextSong.downloadUrl[nextSong.downloadUrl.length-1]?.url || nextSong.downloadUrl[0]?.url);
+        }
+        if (nextUrl) { preloaderRef.current.src = nextUrl; preloaderRef.current.preload = 'auto'; }
+      }
+    }
+  }, [qIndex, queue, quality]);
+
   useEffect(() => {
     const a = audioRef.current;
     const updateTime = () => { 
-      setProgress(a.currentTime); 
-      setDuration(a.duration || 0); 
-      
-      // --- NEW: Read HTML5 Buffer ---
-      if (a.buffered.length > 0) {
-        // Get the furthest buffered point
-        const bufferedEnd = a.buffered.end(a.buffered.length - 1);
-        setBufferProgress(bufferedEnd);
-      }
+      setProgress(a.currentTime); setDuration(a.duration || 0); 
+      if (a.buffered.length > 0) setBufferProgress(a.buffered.end(a.buffered.length - 1));
     };
     const handleEnd = () => onTrackEndRef.current();
     a.addEventListener('timeupdate', updateTime); a.addEventListener('ended', handleEnd);
     return () => { a.removeEventListener('timeupdate', updateTime); a.removeEventListener('ended', handleEnd); };
   }, []);
 
-  // YouTube Iframe Progress & Buffer Tracking
   useEffect(() => {
     if (isPlaying && currentSong?.source === 'youtube') {
       ytProgressInterval.current = setInterval(() => {
         if (ytPlayerRef.current && typeof ytPlayerRef.current.getCurrentTime === 'function') {
           const dur = ytPlayerRef.current.getDuration() || 0;
-          setProgress(ytPlayerRef.current.getCurrentTime());
-          setDuration(dur);
-          
-          // --- NEW: Read YouTube Buffer ---
-          const loadedFraction = ytPlayerRef.current.getVideoLoadedFraction() || 0;
-          setBufferProgress(loadedFraction * dur); // Convert fraction to seconds
+          setProgress(ytPlayerRef.current.getCurrentTime()); setDuration(dur);
+          setBufferProgress((ytPlayerRef.current.getVideoLoadedFraction() || 0) * dur); 
         }
       }, 1000);
     } else { clearInterval(ytProgressInterval.current); }
     return () => clearInterval(ytProgressInterval.current);
   }, [isPlaying, currentSong]);
 
-  // MediaSession & Keyboard Controls
   useEffect(() => {
     const handleKey = (e) => {
         if(e.target.tagName==='INPUT') return;
@@ -750,7 +714,50 @@ const [homeData, setHomeData] = useState({
     <div className="app-layout">
         <Toaster position="top-center" toastOptions={{style:{background:'#333', color:'#fff'}}}/>
 
-        {/* --- INJECTING YOUR HIDDEN YOUTUBE PLAYER --- */}
+        {/* --- INJECTED GLASSMORPHISM CSS --- */}
+        <style>{`
+          .app-layout { background: transparent !important; }
+          .main-content { background: rgba(0, 0, 0, 0.5) !important; border-left: 1px solid rgba(255,255,255,0.05); }
+          .sidebar { background: rgba(0, 0, 0, 0.6) !important; backdrop-filter: blur(20px); }
+          .card { background: rgba(255, 255, 255, 0.05) !important; backdrop-filter: blur(10px); border: 1px solid rgba(255,255,255,0.05); }
+          .header { background: transparent !important; }
+          .player-bar { background: rgba(10, 10, 10, 0.85) !important; backdrop-filter: blur(30px); border-top: 1px solid rgba(255,255,255,0.05); }
+        `}</style>
+
+        {/* --- DYNAMIC AMBIENT BACKGROUND --- */}
+        {currentSong && (
+            <div style={{
+                position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: -1,
+                backgroundImage: `url(${getImg(currentSong.image)})`,
+                backgroundSize: 'cover', backgroundPosition: 'center',
+                filter: 'blur(100px) brightness(0.35)', transform: 'scale(1.2)',
+                transition: 'background-image 1s ease-in-out', pointerEvents: 'none'
+            }} />
+        )}
+
+        {/* --- THEATER MODE FULLSCREEN OVERLAY --- */}
+        <div style={{
+            position: 'absolute', top: 0, left: 0, right: 0, bottom: '90px', // Leaves room for player bar
+            zIndex: 50, background: 'rgba(0,0,0,0.3)', backdropFilter: 'blur(40px)',
+            display: theaterMode ? 'flex' : 'none', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+            opacity: theaterMode ? 1 : 0, transition: 'opacity 0.4s ease', pointerEvents: theaterMode ? 'all' : 'none'
+        }}>
+            {currentSong && (
+                <>
+                    <img src={getImg(currentSong.image)} alt="" style={{
+                        width: '45vh', height: '45vh', borderRadius: '24px',
+                        boxShadow: '0 30px 60px rgba(0,0,0,0.6)', marginBottom: '40px', objectFit: 'cover'
+                    }}/>
+                    <h1 style={{fontSize: '3.5rem', color: 'white', fontWeight: 800, textAlign: 'center', margin: '0 0 10px 0', textShadow: '0 4px 20px rgba(0,0,0,0.5)'}}>
+                        {getName(currentSong)}
+                    </h1>
+                    <p style={{fontSize: '1.5rem', color: 'rgba(255,255,255,0.7)', margin: 0}}>
+                        {getDesc(currentSong)}
+                    </p>
+                </>
+            )}
+        </div>
+
         <div id="hidden-yt-player" style={{ position: 'absolute', top: '-1000px', width: '1px', height: '1px' }}></div>
 
         {showLyrics && (
@@ -812,7 +819,7 @@ const [homeData, setHomeData] = useState({
         )}
 
         {/* SIDEBAR */}
-        <div className="sidebar">
+        <div className="sidebar" style={{ zIndex: 10 }}>
             <div className="brand">Void.</div>
             <div className="nav-links">
                 <div className={`nav-item ${tab==='home'?'active':''}`} onClick={()=>setTab('home')}><Icons.Home/> Home</div>
@@ -832,7 +839,7 @@ const [homeData, setHomeData] = useState({
         </div>
 
         {/* MAIN CONTENT */}
-        <div className="main-content">
+        <div className="main-content" style={{ zIndex: 10 }}>
             <div className="header">
                 <div className="search-box">
                     <select 
@@ -953,7 +960,7 @@ const [homeData, setHomeData] = useState({
                                 </div>
                             </>
                         )}
-                        {source === 'saavn' && resAlbums.length > 0 && (
+                        {resAlbums.length > 0 && (
                             <>
                                 <div className="section-header" style={{marginTop:40}}>Albums</div>
                                 <div className="horizontal-scroll">
@@ -967,7 +974,7 @@ const [homeData, setHomeData] = useState({
                                 </div>
                             </>
                         )}
-                        {source === 'saavn' && resArtists.length > 0 && (
+                        {resArtists.length > 0 && (
                             <>
                                 <div className="section-header" style={{marginTop:40}}>Artists</div>
                                 <div className="horizontal-scroll">
@@ -980,7 +987,7 @@ const [homeData, setHomeData] = useState({
                                 </div>
                             </>
                         )}
-                        {source === 'saavn' && resPlaylists.length > 0 && (
+                        {resPlaylists.length > 0 && (
                             <>
                                 <div className="section-header" style={{marginTop:40}}>Playlists</div>
                                 <div className="horizontal-scroll">
@@ -1020,7 +1027,6 @@ const [homeData, setHomeData] = useState({
                 )}
 
                 {/* --- LIVE HOMEPAGE VIEW --- */}
-{/* --- RESTORED HOMEPAGE VIEW --- */}
                 {tab === 'home' && (
                     <>
                         <div className="hero">
@@ -1227,19 +1233,18 @@ const [homeData, setHomeData] = useState({
         </div>
 
         {/* --- PLAYER BAR --- */}
-        <div className={`player-bar ${currentSong ? 'visible' : ''}`} style={{transform: currentSong ? 'translateY(0)' : 'translateY(200px)', transition:'transform 0.3s'}}>
+        <div className={`player-bar ${currentSong ? 'visible' : ''}`} style={{transform: currentSong ? 'translateY(0)' : 'translateY(200px)', transition:'transform 0.3s', zIndex: 100}}>
             {currentSong && (
                 <>
-                    <div className="mobile-progress-bar" style={{width: `${(progress/duration)*100}%`, display: 'none'}}></div> 
-                    
-                    <div className="p-track">
-                        <img src={getImg(currentSong.image)} alt=""/>
+                    <div className="p-track" onClick={() => setTheaterMode(!theaterMode)} style={{cursor: 'pointer'}}>
+                        <img src={getImg(currentSong.image)} alt="" style={{ transition: 'transform 0.2s ease' }} onMouseOver={e => e.currentTarget.style.transform='scale(1.1)'} onMouseOut={e => e.currentTarget.style.transform='scale(1)'} />
                         <div style={{overflow: 'hidden'}}>
                             <h4 style={{fontSize:'0.9rem', color:'white', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis'}}>{getName(currentSong)}</h4>
                             <p style={{fontSize:'0.8rem', color:'#aaa', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis'}}>{getDesc(currentSong)}</p>
                         </div>
                         {isPlaying && <div className="visualizer"><div className="bar"/><div className="bar"/><div className="bar"/><div className="bar"/></div>}
                     </div>
+                    
                     <div className="p-center">
                         <div className="p-controls">
                             <button className={`btn-icon ${isShuffle?'active':''}`} onClick={toggleShuffle}><Icons.Shuffle/></button>
@@ -1251,31 +1256,24 @@ const [homeData, setHomeData] = useState({
                             </button>
                         </div>
                         {/* TIMELINE */}
-{/* TIMELINE */}
                         <div className="progress-container">
                             <span>{formatTime(progress)}</span>
                             <div className="progress-rail" onClick={handleSeek} style={{ position: 'relative', overflow: 'hidden' }}>
-                                {/* 1. The transparent buffer bar (Loaded data) */}
+                                {/* Transparent buffer bar */}
                                 <div className="progress-fill" style={{
-                                    position: 'absolute',
-                                    top: 0, left: 0, height: '100%',
-                                    background: 'rgba(255, 255, 255, 0.3)', // Transparent White
-                                    width: `${duration > 0 ? (bufferProgress / duration) * 100 : 0}%`,
-                                    transition: 'width 0.2s ease',
-                                    pointerEvents: 'none' // Ensures clicks pass through to the rail
+                                    position: 'absolute', top: 0, left: 0, height: '100%',
+                                    background: 'rgba(255, 255, 255, 0.3)', width: `${duration > 0 ? (bufferProgress / duration) * 100 : 0}%`,
+                                    transition: 'width 0.2s ease', pointerEvents: 'none'
                                 }}></div>
-                                
-                                {/* 2. The active progress bar (Current play time) */}
+                                {/* Active progress bar */}
                                 <div className="progress-fill" style={{
-                                    position: 'absolute',
-                                    top: 0, left: 0, height: '100%',
-                                    width: `${duration > 0 ? (progress / duration) * 100 : 0}%`,
-                                    pointerEvents: 'none'
+                                    position: 'absolute', top: 0, left: 0, height: '100%',
+                                    width: `${duration > 0 ? (progress / duration) * 100 : 0}%`, pointerEvents: 'none'
                                 }}></div>
                             </div>
                             <span>{formatTime(duration)}</span>
                         </div>
-                    </div> {/* <--- THIS IS THE MISSING CLOSING DIV FOR 'p-center' */}
+                    </div> 
 
                     <div className="p-right">
                         <button className={`btn-icon ${showLyrics?'active':''}`} onClick={fetchLyrics}><Icons.Mic/></button>
@@ -1286,11 +1284,11 @@ const [homeData, setHomeData] = useState({
                                   audioRef.current.volume=e.target.value;
                                   if (ytPlayerRef.current?.setVolume) ytPlayerRef.current.setVolume(e.target.value * 100);
                                }}/>
-                        <select className="quality-select" value={quality} onChange={e=>handleQualityChange(e.target.value)}>
-                            <option value="320kbps">320kbps</option>
-                            <option value="160kbps">160kbps</option>
-                            <option value="96kbps">96kbps</option>
-                        </select>
+                        
+                        {/* THEATER MODE TOGGLE */}
+                        <button className="btn-icon" onClick={() => setTheaterMode(!theaterMode)} style={{marginLeft: '10px'}}>
+                            {theaterMode ? <Icons.Minimize/> : <Icons.Maximize/>}
+                        </button>
                     </div>
 
                     <div className="mobile-controls" style={{display:'none'}}> 
