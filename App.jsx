@@ -221,6 +221,7 @@ const [homeData, setHomeData] = useState({
 
   // Standard HTML5 Player Refs
   const audioRef = useRef(new Audio());
+  const preloaderRef = useRef(new Audio());
   
   // --- NEW: YOUTUBE IFRAME PLAYER REFS ---
   const ytPlayerRef = useRef(null);
@@ -234,6 +235,7 @@ const [homeData, setHomeData] = useState({
   const [queue, setQueue] = useState([]);
   const [qIndex, setQIndex] = useState(-1);
   const [progress, setProgress] = useState(0);
+  const [bufferProgress, setBufferProgress] = useState(0);
   const [duration, setDuration] = useState(0);
   const [volume, setVolume] = useState(1);
   const [quality, setQuality] = useState('320kbps');
@@ -616,6 +618,30 @@ const [homeData, setHomeData] = useState({
     return () => unsub();
   }, []);
 
+  // --- NEW: AUTO-PREFETCH NEXT SONG ---
+  useEffect(() => {
+    // Check if there is a next song in the queue
+    if (qIndex >= 0 && qIndex < queue.length - 1) {
+      const nextSong = queue[qIndex + 1];
+      
+      // We only prefetch standard audio (JioSaavn/Apple/Qobuz). 
+      // YouTube manages its own prefetching inside the IFrame.
+      if (nextSong.source !== 'youtube' && nextSong.source !== 'soundcloud') {
+        let nextUrl = "";
+        if (nextSong.downloadUrl && Array.isArray(nextSong.downloadUrl)) {
+            const urlObj = nextSong.downloadUrl.find(u => u.quality === quality);
+            nextUrl = urlObj ? urlObj.url : (nextSong.downloadUrl[nextSong.downloadUrl.length-1]?.url || nextSong.downloadUrl[0]?.url);
+        }
+        
+        if (nextUrl) {
+            // Tell the browser to quietly download this file in the background
+            preloaderRef.current.src = nextUrl;
+            preloaderRef.current.preload = 'auto'; 
+        }
+      }
+    }
+  }, [qIndex, queue, quality]);
+
   const handleAuth = async () => {
     const toastId = toast.loading("Authenticating...");
     try {
@@ -643,28 +669,40 @@ const [homeData, setHomeData] = useState({
   }, [queue, qIndex, repeatMode, isShuffle, currentSong]);
 
   // HTML5 Audio Time & End Listeners
+// HTML5 Audio Time, Buffer & End Listeners
   useEffect(() => {
     const a = audioRef.current;
-    const updateTime = () => { setProgress(a.currentTime); setDuration(a.duration||0); };
+    const updateTime = () => { 
+      setProgress(a.currentTime); 
+      setDuration(a.duration || 0); 
+      
+      // --- NEW: Read HTML5 Buffer ---
+      if (a.buffered.length > 0) {
+        // Get the furthest buffered point
+        const bufferedEnd = a.buffered.end(a.buffered.length - 1);
+        setBufferProgress(bufferedEnd);
+      }
+    };
     const handleEnd = () => onTrackEndRef.current();
-    
-    a.addEventListener('timeupdate', updateTime); 
-    a.addEventListener('ended', handleEnd);
+    a.addEventListener('timeupdate', updateTime); a.addEventListener('ended', handleEnd);
     return () => { a.removeEventListener('timeupdate', updateTime); a.removeEventListener('ended', handleEnd); };
   }, []);
 
-  // YouTube Iframe Progress Tracking
+  // YouTube Iframe Progress & Buffer Tracking
   useEffect(() => {
     if (isPlaying && currentSong?.source === 'youtube') {
       ytProgressInterval.current = setInterval(() => {
         if (ytPlayerRef.current && typeof ytPlayerRef.current.getCurrentTime === 'function') {
+          const dur = ytPlayerRef.current.getDuration() || 0;
           setProgress(ytPlayerRef.current.getCurrentTime());
-          setDuration(ytPlayerRef.current.getDuration() || 0);
+          setDuration(dur);
+          
+          // --- NEW: Read YouTube Buffer ---
+          const loadedFraction = ytPlayerRef.current.getVideoLoadedFraction() || 0;
+          setBufferProgress(loadedFraction * dur); // Convert fraction to seconds
         }
       }, 1000);
-    } else {
-      clearInterval(ytProgressInterval.current);
-    }
+    } else { clearInterval(ytProgressInterval.current); }
     return () => clearInterval(ytProgressInterval.current);
   }, [isPlaying, currentSong]);
 
@@ -1212,14 +1250,30 @@ const [homeData, setHomeData] = useState({
                                 {repeatMode==='one' ? <Icons.RepeatOne/> : <Icons.Repeat/>}
                             </button>
                         </div>
+{/* TIMELINE */}
                         <div className="progress-container">
                             <span>{formatTime(progress)}</span>
-                            <div className="progress-rail" onClick={handleSeek}>
-                                <div className="progress-fill" style={{width: `${(progress/duration)*100}%`}}></div>
+                            <div className="progress-rail" onClick={handleSeek} style={{ position: 'relative', overflow: 'hidden' }}>
+                                {/* 1. The transparent buffer bar (Loaded data) */}
+                                <div className="progress-fill" style={{
+                                    position: 'absolute',
+                                    top: 0, left: 0, height: '100%',
+                                    background: 'rgba(255, 255, 255, 0.3)', // Transparent White
+                                    width: `${duration > 0 ? (bufferProgress / duration) * 100 : 0}%`,
+                                    transition: 'width 0.2s ease',
+                                    pointerEvents: 'none' // Ensures clicks pass through to the rail
+                                }}></div>
+                                
+                                {/* 2. The active progress bar (Current play time) */}
+                                <div className="progress-fill" style={{
+                                    position: 'absolute',
+                                    top: 0, left: 0, height: '100%',
+                                    width: `${duration > 0 ? (progress / duration) * 100 : 0}%`,
+                                    pointerEvents: 'none'
+                                }}></div>
                             </div>
                             <span>{formatTime(duration)}</span>
                         </div>
-                    </div>
                     <div className="p-right">
                         <button className={`btn-icon ${showLyrics?'active':''}`} onClick={fetchLyrics}><Icons.Mic/></button>
                         <button className={`btn-icon ${showQueue?'active':''}`} onClick={()=>setShowQueue(!showQueue)}><Icons.List/></button>
