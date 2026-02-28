@@ -1217,25 +1217,26 @@ function App() {
             </div>
         </div>
 
-        {/* --- PLAYER BAR --- */}
+{/* --- PLAYER BAR --- */}
         <div className={`player-bar ${currentSong ? 'visible' : ''}`} style={{transform: currentSong ? 'translateY(0)' : 'translateY(200px)', transition:'transform 0.3s', zIndex: 100}}>
             {currentSong && (
                 <>
+                    {/* 1. Track Info (Visualizer Removed) */}
                     <div className="p-track" onClick={() => setTheaterMode(!theaterMode)} style={{cursor: 'pointer'}}>
                         <img src={getImg(currentSong.image)} alt="" style={{ transition: 'transform 0.2s ease' }} onMouseOver={e => e.currentTarget.style.transform='scale(1.1)'} onMouseOut={e => e.currentTarget.style.transform='scale(1)'} />
                         <div style={{overflow: 'hidden'}}>
                             <h4 style={{fontSize:'0.9rem', color:'white', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis'}}>{getName(currentSong)}</h4>
                             <p style={{fontSize:'0.8rem', color:'#aaa', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis'}}>{getDesc(currentSong)}</p>
                         </div>
-                        {isPlaying && <div className="visualizer"><div className="bar"/><div className="bar"/><div className="bar"/><div className="bar"/></div>}
                     </div>
                     
+                    {/* 2. Desktop Center Controls */}
                     <div className="p-center">
                         <div className="p-controls">
                             <button className={`btn-icon ${isShuffle?'active':''}`} onClick={toggleShuffle}><Icons.Shuffle/></button>
-                            <button className="btn-icon" onClick={()=>playSong(queue, qIndex-1)}><Icons.SkipBack/></button>
-                            <button className="btn-play" onClick={togglePlay}>{isPlaying ? <Icons.Pause/> : <Icons.Play/>}</button>
-                            <button className="btn-icon" onClick={()=>playSong(queue, qIndex+1)}><Icons.SkipFwd/></button>
+                            <button className="btn-icon" onClick={(e)=>{e.stopPropagation(); playSong(queue, qIndex-1)}}><Icons.SkipBack/></button>
+                            <button className="btn-play" onClick={(e)=>{e.stopPropagation(); togglePlay()}}>{isPlaying ? <Icons.Pause/> : <Icons.Play/>}</button>
+                            <button className="btn-icon" onClick={(e)=>{e.stopPropagation(); playSong(queue, qIndex+1)}}><Icons.SkipFwd/></button>
                             <button className={`btn-icon ${repeatMode!=='none'?'active':''}`} onClick={toggleRepeat}>
                                 {repeatMode==='one' ? <Icons.RepeatOne/> : <Icons.Repeat/>}
                             </button>
@@ -1260,6 +1261,7 @@ function App() {
                         </div>
                     </div> 
 
+                    {/* 3. Desktop Right Controls */}
                     <div className="p-right">
                         <button className={`btn-icon ${showLyrics?'active':''}`} onClick={fetchLyrics}><Icons.Mic/></button>
                         <button className={`btn-icon ${showQueue?'active':''}`} onClick={()=>setShowQueue(!showQueue)}><Icons.List/></button>
@@ -1270,7 +1272,6 @@ function App() {
                                   if (ytPlayerRef.current?.setVolume) ytPlayerRef.current.setVolume(e.target.value * 100);
                                }}/>
                         
-                        {/* NEW STYLED QUALITY SELECTOR */}
                         <select 
                             className="quality-select" 
                             value={quality} 
@@ -1287,14 +1288,16 @@ function App() {
                             <option value="Premium" style={{color: 'black'}}>Premium</option>
                         </select>
 
-                        {/* THEATER MODE TOGGLE */}
                         <button className="btn-icon" onClick={() => setTheaterMode(!theaterMode)} style={{marginLeft: '15px'}}>
                             {theaterMode ? <Icons.Minimize/> : <Icons.Maximize/>}
                         </button>
                     </div>
 
-                    <div className="mobile-controls" style={{display:'none'}}> 
-                       <button className="btn-play-mobile" onClick={togglePlay}>{isPlaying ? <Icons.Pause/> : <Icons.Play/>}</button>
+                    {/* 4. MOBILE CONTROLS (Updated with Prev, Play/Pause, Next) */}
+                    <div className="mobile-controls"> 
+                       <button className="btn-icon" onClick={(e)=>{e.stopPropagation(); playSong(queue, qIndex-1)}}><Icons.SkipBack/></button>
+                       <button className="btn-play-mobile" onClick={(e)=>{e.stopPropagation(); togglePlay()}}>{isPlaying ? <Icons.Pause/> : <Icons.Play/>}</button>
+                       <button className="btn-icon" onClick={(e)=>{e.stopPropagation(); playSong(queue, qIndex+1)}}><Icons.SkipFwd/></button>
                     </div>
                 </>
             )}
