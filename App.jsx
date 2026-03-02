@@ -1,6 +1,10 @@
 import React, { useState, useRef, useEffect } from 'react';
 import './App.css';
 import toast, { Toaster } from 'react-hot-toast';
+// --- NEW: GSAP IMPORTS ---
+import gsap from 'gsap';
+import { useGSAP } from '@gsap/react';
+gsap.registerPlugin(useGSAP);
 
 // --- ICONS ---
 const Icons = {
@@ -249,9 +253,37 @@ function App() {
   const [isShuffle, setIsShuffle] = useState(false);
   const [repeatMode, setRepeatMode] = useState('none'); 
 
+  // --- NEW: GSAP ANIMATION LOGIC ---
+  const containerRef = useRef(null);
+
+  useGSAP(() => {
+    // 1. Animate headers sliding in from the left
+    gsap.from('.section-header, .hero h1, .hero p', {
+      x: -30,
+      opacity: 0,
+      duration: 0.6,
+      stagger: 0.1,
+      ease: 'power3.out',
+      clearProps: 'all' // Clears GSAP styles after running so it doesn't break standard CSS
+    });
+
+    // 2. Animate cards cascading upward
+    gsap.from('.card, .track-row', {
+      y: 50,
+      opacity: 0,
+      duration: 0.5,
+      stagger: 0.05,
+      ease: 'back.out(1.2)',
+      clearProps: 'all' // Crucial so your CSS hover effects still work!
+    });
+  }, { 
+    // This tells GSAP to re-run the animation every time one of these variables changes
+    dependencies: [tab, homeData, resSongs, resAlbums, moodPlaylists, detailsSongs], 
+    scope: containerRef 
+  });
+
   const currentSongRef = useRef(null);
   useEffect(() => { currentSongRef.current = currentSong; }, [currentSong]);
-
   // Helpers
   const getImg = (i) => { if(Array.isArray(i)) return i[i.length-1]?.url || i[0]?.url; return i || "https://via.placeholder.com/150"; }
   const getName = (i) => i?.name || i?.title || "Unknown";
@@ -886,7 +918,8 @@ function App() {
                 </div>
             </div>
 
-            <div className="scroll-area">
+{/* Attach the GSAP scope reference here so it knows what to animate */}
+            <div className="scroll-area" ref={containerRef}>
                 
                 {/* PROFILE VIEW */}
                 {tab === 'profile' && (
