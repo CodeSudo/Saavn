@@ -178,62 +178,6 @@ const APIs = {
   }
 };
 
-// --- UNIVERSAL TEXT IMPORTER ---
-  const [showTextImportModal, setShowTextImportModal] = useState(false);
-  const [importText, setImportText] = useState('');
-  const [importProgress, setImportProgress] = useState({ current: 0, total: 0, status: 'idle' });
-
-  const handleTextImport = async () => {
-    if (!importText.trim()) return;
-    
-    // Split text by new lines to get song list
-    const lines = importText.split('\n').filter(line => line.trim().length > 0);
-    setImportProgress({ current: 0, total: lines.length, status: 'converting' });
-    
-    const matchedSongs = [];
-
-    for (let i = 0; i < lines.length; i++) {
-      const query = lines[i].trim();
-      // Skip empty lines or lines that are just numbers (like "1.")
-      if (!query || query.length < 2) continue;
-
-      setImportProgress({ current: i + 1, total: lines.length, status: 'converting' });
-      
-      try {
-        // Search Void engine for the song name
-        const results = await APIs.youtube.search(query);
-        if (results.songs && results.songs.length > 0) {
-          matchedSongs.push(results.songs[0]); // Add top match
-        }
-      } catch (e) {
-        console.warn(`Could not match: ${query}`);
-      }
-      
-      // Tiny delay to be nice to the API
-      await new Promise(r => setTimeout(r, 100));
-    }
-
-    // Save to Firebase
-    if (matchedSongs.length > 0) {
-      try {
-          const ref = collection(db, `users/${user.uid}/playlists`);
-          await addDoc(ref, { 
-            name: `Imported Playlist ${new Date().toLocaleDateString()}`, 
-            songs: matchedSongs 
-          });
-          toast.success(`Successfully imported ${matchedSongs.length} songs!`);
-          setShowTextImportModal(false);
-          setImportText("");
-      } catch(e) {
-          toast.error("Failed to save playlist");
-      }
-    } else {
-      toast.error("No songs found. Check your spelling.");
-    }
-    
-    setImportProgress({ current: 0, total: 0, status: 'idle' });
-  };
-
 const MOODS = [
   { id: 'm1', name: 'Party', color: '#e57373', query: 'Party Hits' },
   { id: 'm2', name: 'Romance', color: '#f06292', query: 'Love Songs' },
@@ -768,108 +712,174 @@ function App() {
 
   useEffect(() => { document.title = currentSong ? `${getName(currentSong)} • Void` : "Void Music"; }, [currentSong]);
 
+  // --- UNIVERSAL TEXT IMPORTER ---
+  const [showTextImportModal, setShowTextImportModal] = useState(false);
+  const [importText, setImportText] = useState('');
+  const [importProgress, setImportProgress] = useState({ current: 0, total: 0, status: 'idle' });
+
+  const handleTextImport = async () => {
+    if (!importText.trim()) return;
+    
+    // Split text by new lines to get song list
+    const lines = importText.split('\n').filter(line => line.trim().length > 0);
+    setImportProgress({ current: 0, total: lines.length, status: 'converting' });
+    
+    const matchedSongs = [];
+
+    for (let i = 0; i < lines.length; i++) {
+      const query = lines[i].trim();
+      // Skip empty lines or lines that are just numbers (like "1.")
+      if (!query || query.length < 2) continue;
+
+      setImportProgress({ current: i + 1, total: lines.length, status: 'converting' });
+      
+      try {
+        // Search Void engine for the song name
+        const results = await APIs.youtube.search(query);
+        if (results.songs && results.songs.length > 0) {
+          matchedSongs.push(results.songs[0]); // Add top match
+        }
+      } catch (e) {
+        console.warn(`Could not match: ${query}`);
+      }
+      
+      // Tiny delay to be nice to the API
+      await new Promise(r => setTimeout(r, 100));
+    }
+
+    // Save to Firebase
+    if (matchedSongs.length > 0) {
+      try {
+          const ref = collection(db, `users/${user.uid}/playlists`);
+          await addDoc(ref, { 
+            name: `Imported Playlist ${new Date().toLocaleDateString()}`, 
+            songs: matchedSongs 
+          });
+          toast.success(`Successfully imported ${matchedSongs.length} songs!`);
+          setShowTextImportModal(false);
+          setImportText("");
+      } catch(e) {
+          toast.error("Failed to save playlist");
+      }
+    } else {
+      toast.error("No songs found. Check your spelling.");
+    }
+    
+    setImportProgress({ current: 0, total: 0, status: 'idle' });
+  };
+
+
   if(view==='loading') return <div style={{height:'100vh',background:'black',display:'flex',justifyContent:'center',alignItems:'center',color:'white'}}>Loading...</div>;
 
+  // --- PREMIUM LOGIN VIEW ---
   if(view==='auth') return (
-    <div className="auth-container">
-        <Toaster/>
-        <div className="auth-box">
-            <h1 className="brand">Void.</h1>
-            <input className="auth-input" placeholder="Email" onChange={e=>setAuthInput({...authInput,email:e.target.value})}/>
-            <input className="auth-input" type="password" placeholder="Password" onChange={e=>setAuthInput({...authInput,password:e.target.value})}/>
-            <button className="auth-btn" onClick={handleAuth}>{authMode==='login'?'Sign In':'Sign Up'}</button>
-            <p style={{color:'#666', marginTop:20, cursor:'pointer'}} onClick={()=>setAuthMode(authMode==='login'?'signup':'login')}>{authMode==='login'?'Create Account':'Login'}</p>
+    <div style={{
+        height: '100vh', width: '100vw', display: 'flex', justifyContent: 'center', alignItems: 'center',
+        background: 'radial-gradient(circle at 50% -20%, #2a0845 0%, #000000 80%)', // Sleek deep purple glow
+        fontFamily: 'system-ui, -apple-system, sans-serif'
+    }}>
+        <Toaster position="top-center" toastOptions={{style:{background:'#333', color:'#fff'}}}/>
+        
+        {/* Glassmorphism Card */}
+        <div style={{
+            background: 'rgba(255, 255, 255, 0.03)', backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)',
+            border: '1px solid rgba(255, 255, 255, 0.05)', borderRadius: '24px', padding: '50px',
+            width: '100%', maxWidth: '420px', textAlign: 'center', boxShadow: '0 30px 60px rgba(0,0,0,0.6)'
+        }}>
+            <h1 style={{ fontSize: '3.5rem', fontWeight: '800', color: '#fff', margin: '0 0 5px 0', letterSpacing: '-2px' }}>Void.</h1>
+            <p style={{ color: '#aaa', marginBottom: '40px', fontSize: '1.1rem' }}>
+                {authMode === 'login' ? 'Welcome back to the music universe.' : 'Create your sonic identity.'}
+            </p>
+            
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                <input 
+                    placeholder="Email Address" 
+                    value={authInput.email}
+                    onChange={e=>setAuthInput({...authInput,email:e.target.value})}
+                    style={{
+                        width: '100%', padding: '16px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.1)',
+                        background: 'rgba(0,0,0,0.3)', color: 'white', outline: 'none', fontSize: '1rem',
+                        boxSizing: 'border-box', transition: 'border 0.3s ease, background 0.3s ease'
+                    }}
+                    onFocus={(e) => { e.target.style.border = '1px solid #d4acfb'; e.target.style.background = 'rgba(0,0,0,0.5)'; }}
+                    onBlur={(e) => { e.target.style.border = '1px solid rgba(255,255,255,0.1)'; e.target.style.background = 'rgba(0,0,0,0.3)'; }}
+                />
+                <input 
+                    type="password" 
+                    placeholder="Password" 
+                    value={authInput.password}
+                    onChange={e=>setAuthInput({...authInput,password:e.target.value})}
+                    onKeyDown={e=>e.key==='Enter'&&handleAuth()}
+                    style={{
+                        width: '100%', padding: '16px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.1)',
+                        background: 'rgba(0,0,0,0.3)', color: 'white', outline: 'none', fontSize: '1rem',
+                        boxSizing: 'border-box', transition: 'border 0.3s ease, background 0.3s ease'
+                    }}
+                    onFocus={(e) => { e.target.style.border = '1px solid #d4acfb'; e.target.style.background = 'rgba(0,0,0,0.5)'; }}
+                    onBlur={(e) => { e.target.style.border = '1px solid rgba(255,255,255,0.1)'; e.target.style.background = 'rgba(0,0,0,0.3)'; }}
+                />
+                
+                <button 
+                    onClick={handleAuth}
+                    style={{
+                        width: '100%', padding: '16px', borderRadius: '12px', border: 'none',
+                        background: 'linear-gradient(135deg, #d4acfb 0%, #a252f8 100%)', color: '#fff',
+                        fontSize: '1.1rem', fontWeight: 'bold', cursor: 'pointer', marginTop: '10px',
+                        boxShadow: '0 8px 20px rgba(162, 82, 248, 0.3)', transition: 'transform 0.1s ease, filter 0.2s ease'
+                    }}
+                    onMouseOver={(e) => e.currentTarget.style.filter = 'brightness(1.15)'}
+                    onMouseOut={(e) => e.currentTarget.style.filter = 'brightness(1)'}
+                    onMouseDown={(e) => e.currentTarget.style.transform = 'scale(0.97)'}
+                    onMouseUp={(e) => e.currentTarget.style.transform = 'scale(1)'}
+                >
+                    {authMode === 'login' ? 'Sign In' : 'Create Account'}
+                </button>
+            </div>
+
+            <p style={{color:'#888', marginTop: '30px', fontSize: '0.95rem'}}>
+                {authMode === 'login' ? "Don't have an account? " : "Already have an account? "}
+                <span 
+                    style={{color: '#d4acfb', cursor: 'pointer', fontWeight: 'bold', textDecoration: 'underline transparent', transition: 'text-decoration 0.2s'}} 
+                    onClick={()=>setAuthMode(authMode==='login'?'signup':'login')}
+                    onMouseOver={(e) => e.currentTarget.style.textDecoration = 'underline solid #d4acfb'}
+                    onMouseOut={(e) => e.currentTarget.style.textDecoration = 'underline transparent'}
+                >
+                    {authMode === 'login' ? 'Sign Up' : 'Log In'}
+                </span>
+            </p>
         </div>
     </div>
   );
-
-  {/* UNIVERSAL TEXT IMPORT MODAL */}
-        {showTextImportModal && (
-            <div className="modal-overlay">
-                <div className="modal-box" style={{maxWidth: '500px'}}>
-                    <h2>Import Songs</h2>
-                    <p style={{color:'#aaa', fontSize:'0.9rem', marginBottom:'20px'}}>
-                        Paste a list of songs (one per line). <br/>
-                        Example:<br/>
-                        <i>Starboy - The Weeknd<br/>
-                        Shape of You - Ed Sheeran</i>
-                    </p>
-                    
-                    {importProgress.status === 'idle' ? (
-                        <>
-                            <textarea 
-                                className="modal-input" 
-                                placeholder="Paste your song list here..." 
-                                value={importText} 
-                                onChange={e=>setImportText(e.target.value)}
-                                style={{minHeight: '200px', resize: 'vertical', fontFamily: 'monospace'}}
-                            />
-                            <div className="modal-actions">
-                                <button className="btn-cancel" onClick={()=>setShowTextImportModal(false)}>Cancel</button>
-                                <button className="btn-confirm" onClick={handleTextImport}>Start Import</button>
-                            </div>
-                        </>
-                    ) : (
-                        <div style={{textAlign:'center', padding:'20px'}}>
-                            <div className="spin-anim" style={{
-                                width:'40px', height:'40px', border:'4px solid #333', borderTop:'4px solid var(--primary)', 
-                                borderRadius:'50%', margin:'0 auto 20px'
-                            }}></div>
-                            <h3>Finding Songs...</h3>
-                            <p style={{color: '#aaa'}}>{importProgress.current} / {importProgress.total} processed</p>
-                            
-                            {/* Visual Progress Bar */}
-                            <div style={{width: '100%', height: '6px', background: '#333', borderRadius: '3px', marginTop: '15px', overflow: 'hidden'}}>
-                                <div style={{
-                                    height: '100%', background: 'var(--primary)', 
-                                    width: `${(importProgress.current / importProgress.total) * 100}%`,
-                                    transition: 'width 0.2s ease'
-                                }}></div>
-                            </div>
-                        </div>
-                    )}
-                </div>
-            </div>
-        )}
-
-  <div className="nav-section-title">My Playlists</div>
-                
-                {/* UNIVERSAL IMPORT BUTTON */}
-                <button className="btn-create-playlist" onClick={()=>setShowTextImportModal(true)} style={{marginBottom: '10px', background: 'rgba(255, 255, 255, 0.1)', color: 'white', border: '1px solid rgba(255,255,255,0.2)'}}>
-                    <span style={{marginRight: '8px'}}>📋</span> Import Text / Copy
-                </button>
 
   return (
     <div className="app-layout">
         <Toaster position="top-center" toastOptions={{style:{background:'#333', color:'#fff'}}}/>
 
-{/* --- INJECTED GLASSMORPHISM & RESPONSIVE CSS --- */}
+        {/* --- INJECTED GLASSMORPHISM & RESPONSIVE CSS --- */}
         <style>{`
           .app-layout { background: transparent !important; }
           .main-content { background: rgba(0, 0, 0, 0.5) !important; border-left: 1px solid rgba(255,255,255,0.05); }
           .sidebar { background: rgba(0, 0, 0, 0.6) !important; backdrop-filter: blur(20px); }
           .card { background: rgba(255, 255, 255, 0.05) !important; backdrop-filter: blur(10px); border: 1px solid rgba(255,255,255,0.05); }
           .header { background: transparent !important; }
-          .player-bar { background: rgba(10, 10, 10, 0.85) !important; backdrop-filter: blur(30px); border-top: 1px solid rgba(255,255,255,0.05); }
+          .player-bar { background: rgba(10, 10, 10, 0.85) !important; backdrop-filter: blur(30px); border-top: 1px solid rgba(255,255,255,0.05); display: flex; align-items: center; width: 100%; box-sizing: border-box; }
           
           /* --- RESPONSIVE PLAYER BAR FIXES --- */
           .mobile-controls { display: none; }
           @media (max-width: 768px) {
               .p-center, .p-right { display: none !important; }
-              .mobile-controls { display: flex !important; align-items: center; gap: 12px; }
+              /* Force mobile controls to show and push to the right */
+              .mobile-controls { display: flex !important; align-items: center; gap: 15px; margin-left: auto; padding-right: 10px; }
+              .p-track { flex: 1; min-width: 0; padding-right: 10px; }
           }
 
-          /* --- NEW: DISC PLAYER ANIMATION --- */
+          /* --- DISC PLAYER ANIMATION --- */
           @keyframes spinRecord {
               from { transform: rotate(0deg); }
               to { transform: rotate(360deg); }
           }
-          .spin-anim {
-              animation: spinRecord 6s linear infinite;
-          }
-          .spin-paused {
-              animation-play-state: paused;
-          }
+          .spin-anim { animation: spinRecord 6s linear infinite; }
+          .spin-paused { animation-play-state: paused; }
         `}</style>
 
         {/* --- DYNAMIC AMBIENT BACKGROUND --- */}
@@ -883,7 +893,7 @@ function App() {
             }} />
         )}
 
-{/* --- THEATER MODE FULLSCREEN OVERLAY --- */}
+        {/* --- THEATER MODE FULLSCREEN OVERLAY --- */}
         <div style={{
             position: 'absolute', top: 0, left: 0, right: 0, bottom: '90px', 
             zIndex: 50, background: 'rgba(0,0,0,0.3)', backdropFilter: 'blur(40px)',
@@ -984,6 +994,55 @@ function App() {
             </div>
         )}
 
+        {/* UNIVERSAL TEXT IMPORT MODAL (Now correctly placed!) */}
+        {showTextImportModal && (
+            <div className="modal-overlay">
+                <div className="modal-box" style={{maxWidth: '500px'}}>
+                    <h2>Import Songs</h2>
+                    <p style={{color:'#aaa', fontSize:'0.9rem', marginBottom:'20px'}}>
+                        Paste a list of songs (one per line). <br/>
+                        Example:<br/>
+                        <i>Starboy - The Weeknd<br/>
+                        Shape of You - Ed Sheeran</i>
+                    </p>
+                    
+                    {importProgress.status === 'idle' ? (
+                        <>
+                            <textarea 
+                                className="modal-input" 
+                                placeholder="Paste your song list here..." 
+                                value={importText} 
+                                onChange={e=>setImportText(e.target.value)}
+                                style={{minHeight: '200px', resize: 'vertical', fontFamily: 'monospace'}}
+                            />
+                            <div className="modal-actions">
+                                <button className="btn-cancel" onClick={()=>setShowTextImportModal(false)}>Cancel</button>
+                                <button className="btn-confirm" onClick={handleTextImport}>Start Import</button>
+                            </div>
+                        </>
+                    ) : (
+                        <div style={{textAlign:'center', padding:'20px'}}>
+                            <div className="spin-anim" style={{
+                                width:'40px', height:'40px', border:'4px solid #333', borderTop:'4px solid var(--primary)', 
+                                borderRadius:'50%', margin:'0 auto 20px'
+                            }}></div>
+                            <h3>Finding Songs...</h3>
+                            <p style={{color: '#aaa'}}>{importProgress.current} / {importProgress.total} processed</p>
+                            
+                            {/* Visual Progress Bar */}
+                            <div style={{width: '100%', height: '6px', background: '#333', borderRadius: '3px', marginTop: '15px', overflow: 'hidden'}}>
+                                <div style={{
+                                    height: '100%', background: 'var(--primary)', 
+                                    width: `${(importProgress.current / importProgress.total) * 100}%`,
+                                    transition: 'width 0.2s ease'
+                                }}></div>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            </div>
+        )}
+
         {/* SIDEBAR */}
         <div className="sidebar" style={{ zIndex: 10 }}>
             <div className="brand">Void.</div>
@@ -993,6 +1052,12 @@ function App() {
                 <div className={`nav-item ${tab==='library'?'active':''}`} onClick={()=>setTab('library')}><Icons.Library/> Liked Songs</div>
                 
                 <div className="nav-section-title">My Playlists</div>
+
+                {/* UNIVERSAL IMPORT BUTTON */}
+                <button className="btn-create-playlist" onClick={()=>setShowTextImportModal(true)} style={{marginBottom: '10px', background: 'rgba(255, 255, 255, 0.1)', color: 'white', border: '1px solid rgba(255,255,255,0.2)'}}>
+                    <span style={{marginRight: '8px'}}>📋</span> Import Text / Copy
+                </button>
+
                 {userPlaylists.map(pl => (
                     <div key={pl.id} className={`nav-item ${selectedItem?.id===pl.id?'active':''}`} onClick={()=>handleCardClick(pl, 'playlist_custom')}>
                         <span style={{opacity:0.7}}>🎵</span> {pl.name}
@@ -1030,7 +1095,7 @@ function App() {
                 </div>
             </div>
 
-{/* Attach the GSAP scope reference here so it knows what to animate */}
+            {/* Attach the GSAP scope reference here so it knows what to animate */}
             <div className="scroll-area" ref={containerRef}>
                 
                 {/* PROFILE VIEW */}
@@ -1399,7 +1464,7 @@ function App() {
             </div>
         </div>
 
-{/* --- PLAYER BAR --- */}
+        {/* --- PLAYER BAR --- */}
         <div className={`player-bar ${currentSong ? 'visible' : ''}`} style={{transform: currentSong ? 'translateY(0)' : 'translateY(200px)', transition:'transform 0.3s', zIndex: 100}}>
             {currentSong && (
                 <>
