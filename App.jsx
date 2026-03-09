@@ -147,6 +147,15 @@ const APIs = {
     name: 'YouTube',
     apiBase: import.meta.env.VITE_YT_API_BASE || 'http://localhost:3000',
 
+    // Public Piped/Invidious instances that provide direct audio streams by videoId.
+    // These are tried in order — if one fails, the next is attempted.
+    _pipedInstances: [
+      'https://pipedapi.kavin.rocks',
+      'https://pipedapi.mha.fi',
+      'https://pipedapi.tokhmi.xyz',
+      'https://piped-api.garudalinux.org',
+    ],
+
     search: async function(query) {
       try {
         const cleanBase = this.apiBase.replace(/\/$/, '');
@@ -174,19 +183,35 @@ const APIs = {
       }
     },
 
-    // THE REAL FIX: fetch audio stream by videoId directly — no IFrame, no embed restrictions.
-    // Your backend /api/stream?videoId=XXX returns an object with the audio URL.
-    // This is why Jhol/Pal Pal/Kahaani Suno fail: their videoIds block IFrame embedding (error 101/150).
-    // Playing via <audio> bypasses that restriction entirely.
+    // Fetch a direct audio stream URL using public Piped API instances.
+    // Piped is an open-source YouTube frontend — its /streams/:videoId endpoint
+    // returns audioStreams[] with direct URLs that work for ALL videos including
+    // label-restricted ones (Jhol, Pal Pal, Kahaani Suno etc.) because it
+    // fetches the actual audio file, not an embeddable player.
     getStreamUrl: async function(videoId) {
-      const cleanBase = this.apiBase.replace(/\/$/, '');
-      const res = await fetch(`${cleanBase}/api/stream?videoId=${encodeURIComponent(videoId)}`);
-      if (!res.ok) throw new Error(`Backend returned ${res.status}`);
-      const data = await res.json();
-      const url = data.url || data.streamUrl || data.audioUrl || data.stream_url
-                  || data?.formats?.[0]?.url || data?.data?.url || data?.audio?.[0]?.url;
-      if (!url) throw new Error('No stream URL in backend response for videoId=' + videoId);
-      return url;
+      for (const instance of this._pipedInstances) {
+        try {
+          const res = await fetch(`${instance}/streams/${videoId}`, {
+            signal: AbortSignal.timeout(5000)
+          });
+          if (!res.ok) continue;
+          const data = await res.json();
+          // Piped returns audioStreams sorted by bitrate descending
+          // Pick the best quality audio-only stream (opus or webm)
+          const streams = data.audioStreams || [];
+          if (!streams.length) continue;
+          // Prefer higher bitrate
+          const best = streams.sort((a, b) => (b.bitrate || 0) - (a.bitrate || 0))[0];
+          if (best?.url) {
+            console.log(`YT stream via ${instance}: ${best.codec || ''} ${best.bitrate || ''}bps`);
+            return best.url;
+          }
+        } catch (e) {
+          console.warn(`Piped instance ${instance} failed:`, e.message);
+          continue;
+        }
+      }
+      throw new Error('All Piped instances failed for videoId=' + videoId);
     }
   }
 };
@@ -323,30 +348,11 @@ function App() {
   useEffect(() => { setHistory(JSON.parse(localStorage.getItem('musiq_history') || '[]')); }, []);
 
   // --- YOUTUBE IFRAME INITIALIZATION ---
-  // IFrame player kept only to satisfy YouTube API script requirements.
-  // YouTube audio now plays via <audio> using getStreamUrl() — no IFrame embed needed.
-  const initYTPlayer = (videoId = '') => {
-    if (ytPlayerRef.current && typeof ytPlayerRef.current.destroy === 'function') {
-      try { ytPlayerRef.current.destroy(); } catch (e) {}
-    }
-    ytPlayerRef.current = new window.YT.Player('hidden-yt-player', {
-      height: '0', width: '0', videoId,
-      playerVars: { 'autoplay': 0, 'controls': 0 },
-      events: { 'onReady': () => setYtReady(true) }
-    });
-  };
+  // IFrame player is no longer used for YouTube playback.
+  // All audio (including YouTube) now streams through audioRef via Piped API.
+  const initYTPlayer = () => { setYtReady(true); };
 
-  useEffect(() => {
-    if (!window.YT) {
-      const tag = document.createElement('script');
-      tag.src = "https://www.youtube.com/iframe_api";
-      const firstScriptTag = document.getElementsByTagName('script')[0];
-      firstScriptTag.parentNode.insertBefore(tag, firstScriptTag);
-      window.onYouTubeIframeAPIReady = () => initYTPlayer();
-    } else {
-      initYTPlayer();
-    }
-  }, []);
+  // YT IFrame API script no longer injected — YouTube audio streams via Piped API.
 
   const fetchHome = async () => {
     setLoading(true);
@@ -431,9 +437,9 @@ function App() {
     addToHistory(s);
 
     if (s.source === 'youtube') {
-      // Stream audio directly by videoId — bypasses IFrame embed restriction (errors 101/150).
-      // This is why Jhol, Pal Pal, Kahaani Suno now work: we never use IFrame embedding.
-      const toastId = toast.loading('Loading…', { id: 'yt-load' });
+      // Stream via Piped API — works for ALL videos including label-restricted ones.
+      // No IFrame, no embed errors, plays through <audio> like any other source.
+      const toastId = toast.loading('Loading stream…', { id: 'yt-load' });
       try {
         const streamUrl = await APIs.youtube.getStreamUrl(s.id);
         toast.dismiss(toastId);
@@ -443,8 +449,8 @@ function App() {
           .then(() => setIsPlaying(true))
           .catch(e => { console.error('YT audio play error:', e); setIsPlaying(false); });
       } catch (err) {
-        console.error('YT getStreamUrl failed:', err);
-        toast.error('Stream unavailable. Ensure your backend supports ?videoId= param.', { id: 'yt-load', duration: 5000 });
+        console.error('YT stream fetch failed:', err);
+        toast.error('Could not stream this track. Try again or switch source.', { id: 'yt-load' });
         setIsPlaying(false);
       }
       return;
@@ -492,7 +498,6 @@ function App() {
   };
 
   const togglePlay = () => {
-    // All sources including YouTube now play through audioRef
     if (audioRef.current.paused) { audioRef.current.play(); setIsPlaying(true); }
     else { audioRef.current.pause(); setIsPlaying(false); }
   };
@@ -666,7 +671,8 @@ function App() {
     return () => { a.removeEventListener('timeupdate', updateTime); a.removeEventListener('ended', handleEnd); };
   }, []);
 
-  // ytProgressInterval removed — YouTube now uses audioRef, timeupdate handles all progress.
+  // ytProgressInterval removed — YouTube now plays via audioRef.
+  // The existing timeupdate listener on audioRef handles progress for all sources.
 
   useEffect(() => {
     const handleKey = (e) => {
