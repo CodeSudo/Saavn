@@ -782,34 +782,32 @@ function App() {
               padding: 0 16px; /* Padding keeps things off edge */
           }
           
-          /* 1. LEFT ZONE (Track Info) - Takes 30% max */
+          /* 1. LEFT ZONE (Track Info) - Flexible */
           .p-track { 
-              flex: 1; 
-              min-width: 0; 
-              max-width: 30%;
-              display: flex; 
+              width: 300px; /* Start generous */
+              flex: 1 1 auto; /* Allow grow/shrink */
+              overflow: hidden; /* Prevent spill */
+              display: flex;
               align-items: center;
           }
 
-          /* 2. CENTER ZONE (Controls) - Takes 40% max */
+          /* 2. CENTER ZONE (Controls) - Flexible but capped */
           .p-center {
-              flex: 2; /* Grows faster than others */
+              flex: 0 1 600px; /* Don't grow past 600, allow shrink */
               display: flex;
               flex-direction: column;
               align-items: center;
               justify-content: center;
-              max-width: 40%; /* Strict cap to prevent pushing */
           }
 
-          /* 3. RIGHT ZONE (Volume) - Takes 30% max */
+          /* 3. RIGHT ZONE (Volume) - STRICT PRIORITY */
           .p-right {
-              flex: 1;
+              width: auto; /* dynamic width */
+              flex: 0 0 auto; /* Do NOT shrink. Keep buttons visible. */
+              justify-content: flex-end;
               display: flex;
               align-items: center;
-              justify-content: flex-end; /* Pushes content to right */
               gap: 12px;
-              min-width: 0; 
-              max-width: 30%;
           }
 
           /* Fix volume slider width */
@@ -825,6 +823,7 @@ function App() {
               .p-center, .p-right { display: none !important; }
               .mobile-controls { display: flex !important; align-items: center; gap: 15px; margin-left: auto; }
               .p-track { flex: 1; min-width: 0; padding-right: 10px; max-width: none; }
+              .player-bar { padding: 0 15px; }
           }
 
           /* Animation */
