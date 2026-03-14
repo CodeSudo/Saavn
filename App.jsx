@@ -27,7 +27,6 @@ const Icons = {
   Back: () => <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>,
   Maximize: () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg>,
   Minimize: () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="4 14 10 14 10 20"/><polyline points="20 10 14 10 14 4"/><line x1="14" y1="10" x2="21" y2="3"/><line x1="3" y1="21" x2="10" y2="14"/></svg>,
-  // --- NEW: VIDEO ICON ---
   Video: () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polygon points="23 7 16 12 23 17 23 7"></polygon><rect x="1" y="5" width="15" height="14" rx="2" ry="2"></rect></svg>,
 };
 
@@ -123,9 +122,8 @@ function App() {
   const [loading, setLoading] = useState(false);
   const [user, setUser] = useState(null);
   
-  // --- VISUAL STATES ---
   const [theaterMode, setTheaterMode] = useState(false); 
-  const [showMiniPlayer, setShowMiniPlayer] = useState(false); // <--- NEW: MINI PLAYER STATE
+  const [showMiniPlayer, setShowMiniPlayer] = useState(false); 
   
   const [source, setSource] = useState('saavn');
   const [likedSongs, setLikedSongs] = useState([]);
@@ -151,7 +149,6 @@ function App() {
   const [authInput, setAuthInput] = useState({ email: '', password: '' });
   
   const audioRef = useRef(new Audio());
-  const preloaderRef = useRef(new Audio()); 
   const ytPlayerRef = useRef(null);
   const watchdogRef = useRef(null);
   const ytProgressInterval = useRef(null);
@@ -201,11 +198,11 @@ function App() {
   };
   useEffect(() => { setHistory(JSON.parse(localStorage.getItem('musiq_history') || '[]')); }, []);
 
-  // --- FIXED: YOUTUBE INIT (WITH 100% DIMENSIONS FOR MINI PLAYER) ---
+  // --- FIXED: YOUTUBE INIT ---
   const initYTPlayer = (videoId = '') => {
     if (ytPlayerRef.current && typeof ytPlayerRef.current.destroy === 'function') { try { ytPlayerRef.current.destroy(); } catch (e) {} }
     ytPlayerRef.current = new window.YT.Player('hidden-yt-player', {
-      height: '100%', width: '100%', videoId: videoId, // <--- Set to 100% so it fits the wrapper
+      height: '100%', width: '100%', videoId: videoId, 
       playerVars: { 'autoplay': 1, 'controls': 0, 'origin': window.location.origin },
       events: {
         'onReady': (event) => { setYtReady(true); if (videoId) event.target.playVideo(); },
@@ -373,7 +370,6 @@ function App() {
 
   const onTrackEndRef = useRef(() => {});
   useEffect(() => { onTrackEndRef.current = () => { if(repeatMode === 'one') { if(currentSong?.source === 'youtube') ytPlayerRef.current?.seekTo(0); else { audioRef.current.currentTime = 0; audioRef.current.play(); } } else if(isShuffle) { playSong(queue, Math.floor(Math.random() * queue.length)); } else if(qIndex < queue.length - 1) { playSong(queue, qIndex + 1); } else if(repeatMode === 'all') { playSong(queue, 0); } else { setIsPlaying(false); } }; }, [queue, qIndex, repeatMode, isShuffle, currentSong]);
-  useEffect(() => { if (qIndex >= 0 && qIndex < queue.length - 1) { const nextSong = queue[qIndex + 1]; if (nextSong.source !== 'youtube' && nextSong.source !== 'soundcloud') { let nextUrl = ""; if (nextSong.downloadUrl && Array.isArray(nextSong.downloadUrl)) { const urlObj = nextSong.downloadUrl.find(u => u.quality === quality); nextUrl = urlObj ? urlObj.url : (nextSong.downloadUrl[nextSong.downloadUrl.length-1]?.url || nextSong.downloadUrl[0]?.url); } if (nextUrl) { preloaderRef.current.src = nextUrl; preloaderRef.current.preload = 'auto'; } } } }, [qIndex, queue, quality]);
 
   useEffect(() => {
     const a = audioRef.current;
@@ -430,7 +426,7 @@ function App() {
           .p-right { justify-self: end; display: flex; align-items: center; gap: 12px; }
           .volume-slider { width: 80px; accent-color: #d4acfb; }
           
-          /* --- NEW: MINI VIDEO PLAYER CSS --- */
+          /* --- MINI VIDEO PLAYER CSS FIX --- */
           .yt-mini-wrapper {
               position: fixed;
               bottom: 110px;
@@ -443,15 +439,15 @@ function App() {
               box-shadow: 0 10px 40px rgba(0,0,0,0.8);
               border: 1px solid rgba(255,255,255,0.1);
               z-index: 99;
-              transform: translateY(20px);
+              transform: translateX(150%); /* Start completely off-screen */
               opacity: 0;
               pointer-events: none; /* Let clicks pass through when hidden */
-              transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+              transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
           }
           .yt-mini-wrapper.visible {
-              transform: translateY(0);
+              transform: translateX(0); /* Slide in */
               opacity: 1;
-              pointer-events: all; /* Make clickable when visible */
+              pointer-events: all; /* Make clickable */
           }
           .close-mini {
               position: absolute;
@@ -471,7 +467,7 @@ function App() {
               font-size: 12px;
               transition: top 0.2s ease;
           }
-          .yt-mini-wrapper:hover .close-mini { top: 5px; right: 5px; } /* Show close button on hover */
+          .yt-mini-wrapper:hover .close-mini { top: 5px; right: 5px; } 
 
           /* --- MOBILE --- */
           .mobile-controls { display: none; }
@@ -494,7 +490,7 @@ function App() {
             {currentSong && (<><div className={`spin-anim ${!isPlaying ? 'spin-paused' : ''}`} style={{ width: '45vh', height: '45vh', borderRadius: '50%', marginBottom: '40px', background: 'radial-gradient(circle, #222 0%, #050505 100%)', boxShadow: '0 30px 60px rgba(0,0,0,0.8), inset 0 0 0 10px #111, inset 0 0 0 12px #222', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative' }}><img src={getImg(currentSong.image)} alt="" style={{ width: '40%', height: '40%', objectFit: 'cover', borderRadius: '50%', boxShadow: '0 0 0 4px #000' }}/><div style={{ position: 'absolute', width: '15px', height: '15px', background: '#111', borderRadius: '50%', border: '1px solid #333' }}></div></div><h1 style={{fontSize: '3.5rem', color: 'white', fontWeight: 800, textAlign: 'center', margin: '0 0 10px 0', textShadow: '0 4px 20px rgba(0,0,0,0.5)'}}>{getName(currentSong)}</h1><p style={{fontSize: '1.5rem', color: 'rgba(255,255,255,0.7)', margin: 0}}>{getDesc(currentSong)}</p></>)}
         </div>
 
-        {/* --- NEW: FLOATING MINI VIDEO PLAYER --- */}
+        {/* --- FLOATING MINI VIDEO PLAYER --- */}
         <div className={`yt-mini-wrapper ${showMiniPlayer && currentSong?.source === 'youtube' ? 'visible' : ''}`}>
             <button className="close-mini" onClick={() => setShowMiniPlayer(false)}>✕</button>
             <div id="hidden-yt-player"></div>
@@ -536,7 +532,6 @@ function App() {
                     <div className="p-center"><div className="p-controls"><button className={`btn-icon ${isShuffle?'active':''}`} onClick={toggleShuffle}><Icons.Shuffle/></button><button className="btn-icon" onClick={(e)=>{e.stopPropagation(); playSong(queue, qIndex-1)}}><Icons.SkipBack/></button><button className="btn-play" onClick={(e)=>{e.stopPropagation(); togglePlay()}}>{isPlaying ? <Icons.Pause/> : <Icons.Play/>}</button><button className="btn-icon" onClick={(e)=>{e.stopPropagation(); playSong(queue, qIndex+1)}}><Icons.SkipFwd/></button><button className={`btn-icon ${repeatMode!=='none'?'active':''}`} onClick={toggleRepeat}>{repeatMode==='one' ? <Icons.RepeatOne/> : <Icons.Repeat/>}</button></div><div className="progress-container"><span>{formatTime(progress)}</span><div className="progress-rail" onClick={handleSeek} style={{ position: 'relative', overflow: 'hidden' }}><div className="progress-fill" style={{ position: 'absolute', top: 0, left: 0, height: '100%', background: 'rgba(255, 255, 255, 0.3)', width: `${duration > 0 ? (bufferProgress / duration) * 100 : 0}%`, transition: 'width 0.2s ease', pointerEvents: 'none' }}></div><div className="progress-fill" style={{ position: 'absolute', top: 0, left: 0, height: '100%', width: `${duration > 0 ? (progress / duration) * 100 : 0}%`, pointerEvents: 'none' }}></div></div><span>{formatTime(duration)}</span></div></div> 
                     <div className="p-right">
                         
-                        {/* --- NEW: VIDEO TOGGLE BUTTON (ONLY SHOWS FOR YOUTUBE SONGS) --- */}
                         {currentSong?.source === 'youtube' && (
                             <button className={`btn-icon ${showMiniPlayer?'active':''}`} onClick={()=>setShowMiniPlayer(!showMiniPlayer)} title="Toggle Video Player">
                                 <Icons.Video/>
@@ -545,8 +540,7 @@ function App() {
 
                         <button className={`btn-icon ${showLyrics?'active':''}`} onClick={fetchLyrics}><Icons.Mic/></button>
                         <button className={`btn-icon ${showQueue?'active':''}`} onClick={()=>setShowQueue(!showQueue)}><Icons.List/></button>
-                        <input type="range" className="volume-slider" min="0" max="1" step="0.1" value={volume} onChange={e => { setVolume(e.target.value); audioRef.current.volume=e.target.value; if (ytPlayerRef.current?.setVolume) ytPlayerRef.current.setVolume(e.target.value * 100); }}/>
-                        <select className="quality-select" value={quality} onChange={e => handleQualityChange(e.target.value)} style={{ background: 'rgba(255, 255, 255, 0.15)', color: 'white', border: '1px solid rgba(255, 255, 255, 0.2)', borderRadius: '20px', padding: '6px 12px', marginLeft: '0', cursor: 'pointer', outline: 'none', fontWeight: '600', fontSize: '0.75rem', backdropFilter: 'blur(10px)' }}><option value="96kbps" style={{color: 'black'}}>Low</option><option value="160kbps" style={{color: 'black'}}>Medium</option><option value="320kbps" style={{color: 'black'}}>High</option><option value="Premium" style={{color: 'black'}}>Premium</option></select>
+                        <input type="range" className="volume-slider" min="0" max="1" step="0.1" value={volume} onChange={e => { setVolume(e.target.value); audioRef.current.volume=e.target.value; if (ytPlayerRef.current?.setVolume) ytPlayerRef.current.setVolume(e.target.value * 100); }}/><select className="quality-select" value={quality} onChange={e => handleQualityChange(e.target.value)} style={{ background: 'rgba(255, 255, 255, 0.15)', color: 'white', border: '1px solid rgba(255, 255, 255, 0.2)', borderRadius: '20px', padding: '6px 12px', marginLeft: '0', cursor: 'pointer', outline: 'none', fontWeight: '600', fontSize: '0.75rem', backdropFilter: 'blur(10px)' }}><option value="96kbps" style={{color: 'black'}}>Low</option><option value="160kbps" style={{color: 'black'}}>Medium</option><option value="320kbps" style={{color: 'black'}}>High</option><option value="Premium" style={{color: 'black'}}>Premium</option></select>
                         <button className="btn-icon" onClick={() => setTheaterMode(!theaterMode)} style={{marginLeft: '0'}}>{theaterMode ? <Icons.Minimize/> : <Icons.Maximize/>}</button>
                     </div>
 
